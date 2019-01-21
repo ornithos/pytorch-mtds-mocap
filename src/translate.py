@@ -84,16 +84,13 @@ parser.add_argument('--use_cpu', dest='use_cpu',
                   help='', action='store_true',
                   default=False)
 parser.add_argument('--load', dest='load',
-                  help='Try to load a previous checkpoint.', action='store_true',
-                  default=False)
+                  help='Try to load a previous checkpoint.',
+                  default=0, type=int)
 parser.add_argument('--sample', dest='sample',
                   help='Set to True for sampling.', action='store_true',
                   default=False)
 
 args = parser.parse_args()
-
-if not os.path.exists(args.train_dir):
-    os.makedirs(args.train_dir)
 
 train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'out_{0}'.format(args.seq_length_out),
@@ -129,7 +126,10 @@ def create_model(actions, sampling=False):
     return model
 
   print("Loading model")
-  model = torch.load(train_dir + 'Best_model')
+  model = torch.load(train_dir + '/model_' + str(args.load))
+  if sampling:
+    model.source_seq_len = 50
+    model.target_seq_len = 100
   return model
 
 
@@ -146,7 +146,7 @@ def train():
   # Limit TF to take a fraction of the GPU memory
 
   if True:
-    model = create_model(actions)
+    model = create_model(actions, args.sample)
     if not args.use_cpu:
         model = model.cuda()
 
@@ -163,7 +163,6 @@ def train():
     step_time, loss = 0, 0
     optimiser = optim.SGD(model.parameters(), lr=args.learning_rate)
     #optimiser = optim.Adam(model.parameters(), lr=learning_rate, betas = (0.9, 0.999))
-    best_srnn_loss = np.Inf
 
     for _ in range( args.iterations ):
       optimiser.zero_grad()
@@ -331,14 +330,10 @@ def train():
               "============================" % (current_step,
               args.learning_rate, step_time*1000, loss,
               val_loss, srnn_loss))
-        print()
-        print()
-        if best_srnn_loss > srnn_loss:
-            best_srnn_loss = srnn_loss
-            print("Saving model!")
-            torch.save(model, train_dir + 'Best_model')
-        print()
 
+        torch.save(model, train_dir + '/model_' + str(current_step))
+
+        print()
         previous_losses.append(loss)
 
         # Reset global time and loss
@@ -392,7 +387,7 @@ def get_srnn_gts( actions, model, test_set, data_mean, data_std, dim_to_ignore, 
 
 def sample():
   """Sample predictions for srnn's seeds"""
-  actions = define_actions( action )
+  actions = define_actions( args.action )
 
   if True:
     # === Create the model ===
@@ -405,7 +400,7 @@ def sample():
 
     # Load all the data
     train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_data(
-      actions, args.seq_length_in, args.seq_length_out, data_dir, not args.omit_one_hot )
+      actions, args.seq_length_in, args.seq_length_out, args.data_dir, not args.omit_one_hot )
 
     # === Read and denormalize the gt with srnn's seeds, as we'll need them
     # many times for evaluation in Euler Angles ===
