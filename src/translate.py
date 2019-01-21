@@ -20,70 +20,112 @@ import seq2seq_model
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-torch.cuda.set_device(1)
+import argparse
 
+# Learning
+parser = argparse.ArgumentParser(description='Train RNN for human pose estimation')
+parser.add_argument('--learning_rate', dest='learning_rate',
+                  help='Learning rate',
+                  default=0.005, type=float)
+parser.add_argument('--learning_rate_decay_factor', dest='learning_rate_decay_factor',
+                  help='Learning rate is multiplied by this much. 1 means no decay.',
+                  default=0.95, type=float)
+parser.add_argument('--learning_rate_step', dest='learning_rate_step',
+                  help='Every this many steps, do decay.',
+                  default=10000, type=int)
+parser.add_argument('--batch_size', dest='batch_size',
+                  help='Batch size to use during training.',
+                  default=16, type=int)
+parser.add_argument('--max_gradient_norm', dest='max_gradient_norm',
+                  help='Clip gradients to this norm.',
+                  default=5, type=float)
+parser.add_argument('--iterations', dest='iterations',
+                  help='Iterations to train for.',
+                  default=1e5, type=int)
+parser.add_argument('--test_every', dest='test_every',
+                  help='',
+                  default=200, type=int)
+# Architecture
+parser.add_argument('--architecture', dest='architecture',
+                  help='Seq2seq architecture to use: [basic, tied].',
+                  default='tied', type=str)
+parser.add_argument('--loss_to_use', dest='loss_to_use',
+                  help='The type of loss to use, supervised or sampling_based',
+                  default='sampling_based', type=str)
+parser.add_argument('--residual_velocities', dest='residual_velocities',
+                  help='Add a residual connection that effectively models velocities',action='store_true',
+                  default=False)
+parser.add_argument('--size', dest='size',
+                  help='Size of each model layer.',
+                  default=1024, type=int)
+parser.add_argument('--num_layers', dest='num_layers',
+                  help='Number of layers in the model.',
+                  default=1, type=int)
+parser.add_argument('--seq_length_in', dest='seq_length_in',
+                  help='Number of frames to feed into the encoder. 25 fp',
+                  default=50, type=int)
+parser.add_argument('--seq_length_out', dest='seq_length_out',
+                  help='Number of frames that the decoder has to predict. 25fps',
+                  default=10, type=int)
+parser.add_argument('--omit_one_hot', dest='omit_one_hot',
+                  help='', action='store_true',
+                  default=False)
+# Directories
+parser.add_argument('--data_dir', dest='data_dir',
+                  help='Data directory',
+                  default=os.path.normpath("./data/h3.6m/dataset"), type=str)
+parser.add_argument('--train_dir', dest='train_dir',
+                  help='Training directory',
+                  default=os.path.normpath("./experiments/"), type=str)
+parser.add_argument('--action', dest='action',
+                  help='The action to train on. all means all the actions, all_periodic means walking, eating and smoking',
+                  default='all', type=str)
+parser.add_argument('--use_cpu', dest='use_cpu',
+                  help='', action='store_true',
+                  default=False)
+parser.add_argument('--load', dest='load',
+                  help='Try to load a previous checkpoint.', action='store_true',
+                  default=False)
+parser.add_argument('--sample', dest='sample',
+                  help='Set to True for sampling.', action='store_true',
+                  default=False)
 
-learning_rate = .005
-learning_rate_decay_factor = 0.95
-learning_rate_step = 10000
-max_gradient_norm = 5
-batch_size = 16
-iterations = int(1e5)
-architecture = 'tied'
-size = 1024
-num_layers = 1
-seq_length_in = 50
-seq_length_out = 25
-omit_one_hot = False
-residual_velocities = False
-data_dir = './data/h3.6m/dataset'
-action = 'walking'
-loss_to_use = 'sampling_based'
-test_every = 1000
-save_every = 1000
-dosample = False
-#dosample = True
-use_cpu = False
-train_dir = './experiments/' + action + '/'
-if dosample:
-    load = 1
-else:
-    load = 0
+args = parser.parse_args()
 
-if not os.path.exists(train_dir):
-    os.makedirs(train_dir)
+if not os.path.exists(args.train_dir):
+    os.makedirs(args.train_dir)
 
-train_dir = os.path.normpath(os.path.join( train_dir, action,
-  'out_{0}'.format(seq_length_out),
-  'iterations_{0}'.format(iterations),
-  architecture,
-  loss_to_use,
-  'omit_one_hot' if omit_one_hot else 'one_hot',
-  'depth_{0}'.format(num_layers),
-  'size_{0}'.format(size),
-  'lr_{0}'.format(learning_rate),
-  'residual_vel' if residual_velocities else 'not_residual_vel'))
+train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
+  'out_{0}'.format(args.seq_length_out),
+  'iterations_{0}'.format(args.iterations),
+  args.architecture,
+  args.loss_to_use,
+  'omit_one_hot' if args.omit_one_hot else 'one_hot',
+  'depth_{0}'.format(args.num_layers),
+  'size_{0}'.format(args.size),
+  'lr_{0}'.format(args.learning_rate),
+  'residual_vel' if args.residual_velocities else 'not_residual_vel'))
 
 def create_model(actions, sampling=False):
   """Create translation model and initialize or load parameters in session."""
 
   model = seq2seq_model.Seq2SeqModel(
-      architecture,
-      seq_length_in if not sampling else 50,
-      seq_length_out if not sampling else 100,
-      size, # hidden layer size
-      num_layers,
-      max_gradient_norm,
-      batch_size,
-      learning_rate,
-      learning_rate_decay_factor,
-      loss_to_use if not sampling else "sampling_based",
+      args.architecture,
+      args.seq_length_in if not sampling else 50,
+      args.seq_length_out if not sampling else 100,
+      args.size, # hidden layer size
+      args.num_layers,
+      args.max_gradient_norm,
+      args.batch_size,
+      args.learning_rate,
+      args.learning_rate_decay_factor,
+      args.loss_to_use if not sampling else "sampling_based",
       len( actions ),
-      not omit_one_hot,
-      residual_velocities,
+      not args.omit_one_hot,
+      args.residual_velocities,
       dtype=torch.float32)
 
-  if load <= 0:
+  if args.load <= 0:
     return model
 
   print("Loading model")
@@ -92,61 +134,38 @@ def create_model(actions, sampling=False):
 
 
 def train():
-  learning_rate = .005
-  learning_rate_decay_factor = 0.95
-  learning_rate_step = 10000
-  max_gradient_norm = 5
-  batch_size = 16
-  iterations = int(1e5)
-  architecture = 'tied'
-  size = 1024
-  num_layers = 1
-  seq_length_in = 50
-  seq_length_out = 25
-  omit_one_hot = False
-  residual_velocities = False
-  data_dir = './data/h3.6m/dataset'
-  action = 'walking'
-  loss_to_use = 'sampling_based'
-  test_every = 1000
-  save_every = 1000
-  train_dir = './experiments/' + action + '/'
-  dosample = True
-  use_cpu = False
-  load = 0
-
   """Train a seq2seq model on human motion"""
 
-  actions = define_actions( action )
+  actions = define_actions( args.action )
 
   number_of_actions = len( actions )
 
   train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_data(
-    actions, seq_length_in, seq_length_out, data_dir, not omit_one_hot )
+    actions, args.seq_length_in, args.seq_length_out, args.data_dir, not args.omit_one_hot )
 
   # Limit TF to take a fraction of the GPU memory
 
   if True:
     model = create_model(actions)
-    if not use_cpu:
+    if not args.use_cpu:
         model = model.cuda()
 
     # === Read and denormalize the gt with srnn's seeds, as we'll need them
     # many times for evaluation in Euler Angles ===
     srnn_gts_euler = get_srnn_gts( actions, model, test_set, data_mean,
-                              data_std, dim_to_ignore, not omit_one_hot )
+                              data_std, dim_to_ignore, not args.omit_one_hot )
 
     #=== This is the training loop ===
     step_time, loss, val_loss = 0.0, 0.0, 0.0
-    current_step = 0 if load <= 0 else load + 1
+    current_step = 0 if args.load <= 0 else args.load + 1
     previous_losses = []
 
     step_time, loss = 0, 0
-    optimiser = optim.SGD(model.parameters(), lr=learning_rate)
+    optimiser = optim.SGD(model.parameters(), lr=args.learning_rate)
     #optimiser = optim.Adam(model.parameters(), lr=learning_rate, betas = (0.9, 0.999))
     best_srnn_loss = np.Inf
 
-    for _ in range( iterations ):
+    for _ in range( args.iterations ):
       optimiser.zero_grad()
       model.train()
 
@@ -155,11 +174,11 @@ def train():
       # Actual training
 
       # === Training step ===
-      encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch( train_set, not omit_one_hot )
+      encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch( train_set, not args.omit_one_hot )
       encoder_inputs = torch.from_numpy(encoder_inputs).float()
       decoder_inputs = torch.from_numpy(decoder_inputs).float()
       decoder_outputs = torch.from_numpy(decoder_outputs).float()
-      if not use_cpu:
+      if not args.use_cpu:
         encoder_inputs = encoder_inputs.cuda()
         decoder_inputs = decoder_inputs.cuda()
         decoder_outputs = decoder_outputs.cuda()
@@ -181,27 +200,27 @@ def train():
       if current_step % 10 == 0:
         print("step {0:04d}; step_loss: {1:.4f}".format(current_step, step_loss ))
 
-      step_time += (time.time() - start_time) / test_every
-      loss += step_loss / test_every
+      step_time += (time.time() - start_time) / args.test_every
+      loss += step_loss / args.test_every
       current_step += 1
       # === step decay ===
-      if current_step % learning_rate_step == 0:
-        learning_rate = learning_rate*learning_rate_decay_factor
-        optimiser = optim.Adam(model.parameters(), lr=learning_rate, betas = (0.9, 0.999))
-        print("Decay learning rate. New value at " + str(learning_rate))
+      if current_step % args.learning_rate_step == 0:
+        args.learning_rate = args.learning_rate*args.learning_rate_decay_factor
+        optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas = (0.9, 0.999))
+        print("Decay learning rate. New value at " + str(args.learning_rate))
 
       #cuda.empty_cache()
 
       # Once in a while, we save checkpoint, print statistics, and run evals.
-      if current_step % test_every == 0:
+      if current_step % args.test_every == 0:
         model.eval()
 
         # === Validation with randomly chosen seeds ===
-        encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch( test_set, not omit_one_hot )
+        encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch( test_set, not args.omit_one_hot )
         encoder_inputs = torch.from_numpy(encoder_inputs).float()
         decoder_inputs = torch.from_numpy(decoder_inputs).float()
         decoder_outputs = torch.from_numpy(decoder_outputs).float()
-        if not use_cpu:
+        if not args.use_cpu:
           encoder_inputs = encoder_inputs.cuda()
           decoder_inputs = decoder_inputs.cuda()
           decoder_outputs = decoder_outputs.cuda()
@@ -232,7 +251,7 @@ def train():
           encoder_inputs = torch.from_numpy(encoder_inputs).float()
           decoder_inputs = torch.from_numpy(decoder_inputs).float()
           decoder_outputs = torch.from_numpy(decoder_outputs).float()
-          if not use_cpu:
+          if not args.use_cpu:
             encoder_inputs = encoder_inputs.cuda()
             decoder_inputs = decoder_inputs.cuda()
             decoder_outputs = decoder_outputs.cuda()
@@ -253,7 +272,7 @@ def train():
           srnn_loss = srnn_loss.cpu().data.numpy()
           # Denormalize the output
           srnn_pred_expmap = data_utils.revert_output_format( srnn_poses,
-            data_mean, data_std, dim_to_ignore, actions, not omit_one_hot )
+            data_mean, data_std, dim_to_ignore, actions, not args.omit_one_hot )
 
           # Save the errors here
           mean_errors = np.zeros( (len(srnn_pred_expmap), srnn_pred_expmap[0].shape[0]) )
@@ -294,7 +313,7 @@ def train():
           # Pretty print of the results for 80, 160, 320, 400, 560 and 1000 ms
           print("{0: <16} |".format(action), end="")
           for ms in [1,3,7,9,13,24]:
-            if seq_length_out >= ms+1:
+            if args.seq_length_out >= ms+1:
               print(" {0:.3f} |".format( mean_mean_errors[ms] ), end="")
             else:
               print("   n/a |", end="")
@@ -310,7 +329,7 @@ def train():
               "Val loss:            %.4f\n"
               "srnn loss:           %.4f\n"
               "============================" % (current_step,
-              learning_rate, step_time*1000, loss,
+              args.learning_rate, step_time*1000, loss,
               val_loss, srnn_loss))
         print()
         print()
@@ -373,51 +392,27 @@ def get_srnn_gts( actions, model, test_set, data_mean, data_std, dim_to_ignore, 
 
 def sample():
   """Sample predictions for srnn's seeds"""
-  learning_rate = .005
-  learning_rate_decay_factor = 0.95
-  learning_rate_step = 10000
-  max_gradient_norm = 5
-  batch_size = 16
-  iterations = int(1e5)
-  architecture = 'tied'
-  size = 1024
-  num_layers = 1
-  seq_length_in = 50
-  seq_length_out = 25
-  omit_one_hot = False
-  residual_velocities = False
-  data_dir = './data/h3.6m/dataset'
-  train_dir = './experiments/'
-  action = 'walking'
-  loss_to_use = 'sampling_based'
-  test_every = 1000
-  save_every = 1000
-  #dosample = False
-  dosample = True
-  use_cpu = False
-  load = 0
-
   actions = define_actions( action )
 
   if True:
     # === Create the model ===
-    print("Creating %d layers of %d units." % (num_layers, size))
+    print("Creating %d layers of %d units." % (args.num_layers, args.size))
     sampling     = True
     model = create_model(actions, sampling)
-    if not use_cpu:
+    if not args.use_cpu:
         model = model.cuda()
     print("Model created")
 
     # Load all the data
     train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_data(
-      actions, seq_length_in, seq_length_out, data_dir, not omit_one_hot )
+      actions, args.seq_length_in, args.seq_length_out, data_dir, not args.omit_one_hot )
 
     # === Read and denormalize the gt with srnn's seeds, as we'll need them
     # many times for evaluation in Euler Angles ===
     srnn_gts_expmap = get_srnn_gts( actions, model, test_set, data_mean,
-                              data_std, dim_to_ignore, not omit_one_hot, to_euler=False )
+                              data_std, dim_to_ignore, not args.omit_one_hot, to_euler=False )
     srnn_gts_euler = get_srnn_gts( actions, model, test_set, data_mean,
-                              data_std, dim_to_ignore, not omit_one_hot )
+                              data_std, dim_to_ignore, not args.omit_one_hot )
 
     # Clean and create a new h5 file of samples
     SAMPLES_FNAME = 'samples.h5'
@@ -435,7 +430,7 @@ def sample():
       encoder_inputs = torch.from_numpy(encoder_inputs).float()
       decoder_inputs = torch.from_numpy(decoder_inputs).float()
       decoder_outputs = torch.from_numpy(decoder_outputs).float()
-      if not use_cpu:
+      if not args.use_cpu:
         encoder_inputs = encoder_inputs.cuda()
         decoder_inputs = decoder_inputs.cuda()
         decoder_outputs = decoder_outputs.cuda()
@@ -454,9 +449,7 @@ def sample():
 
       srnn_loss = srnn_loss.cpu().data.numpy()
       # denormalizes too
-      srnn_pred_expmap = data_utils.revert_output_format(srnn_poses, data_mean, data_std, dim_to_ignore, actions, not omit_one_hot )
-
-      # Save the conditioning seeds
+      srnn_pred_expmap = data_utils.revert_output_format(srnn_poses, data_mean, data_std, dim_to_ignore, actions, not args.omit_one_hot )
 
       # Save the samples
       with h5py.File( SAMPLES_FNAME, 'a' ) as hf:
@@ -571,7 +564,7 @@ def read_all_data( actions, seq_length_in, seq_length_out, data_dir, one_hot ):
 
 
 def main():
-  if dosample:
+  if args.sample:
     sample()
   else:
     train()
