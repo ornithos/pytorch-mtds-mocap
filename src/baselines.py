@@ -7,7 +7,7 @@ from __future__ import print_function
 
 import numpy as np
 from six.moves import xrange  # pylint: disable=redefined-builtin
-import tensorflow as tf
+import torch
 
 import translate
 import data_utils
@@ -141,10 +141,10 @@ def main():
   FLAGS.loss_to_use = "sampling_based"
   FLAGS.omit_one_hot = True,
   FLAGS.residual_velocities = False,
-  dtype = tf.float32
+  dtype = torch.float32
 
   # Baselines are very simple. No need to use the GPU.
-  with tf.Session(config=tf.ConfigProto( device_count = {"GPU": 0})) as sess:
+  if True:
 
     model = seq2seq_model.Seq2SeqModel(
         FLAGS.architecture,
