@@ -1,27 +1,29 @@
 
 ## human-motion-prediction
 
-This is the code for the paper
+This is a pytorch implementation of the paper
 
 Julieta Martinez, Michael J. Black, Javier Romero.
 _On human motion prediction using recurrent neural networks_. In CVPR 17.
 
 It can be found on arxiv as well: https://arxiv.org/pdf/1705.02445.pdf
 
-The code in this repository was written by [Julieta Martinez](https://github.com/una-dinosauria/) and [Javier Romero](https://github.com/libicocco/).
+The code in the original repository was written by [Julieta Martinez](https://github.com/una-dinosauria/) and [Javier Romero](https://github.com/libicocco/) and is accessible [here](/blob/master/src/translate.py).
+
+If you have any comment on this fork you can email me at [enriccorona93@gmail.com]
 
 ### Dependencies
 
 * [h5py](https://github.com/h5py/h5py) -- to save samples
-* [Tensorflow](https://github.com/tensorflow/tensorflow/) 1.2 or later.
+* [Pytorch](https://pytorch.org/)
 
 ### Get this code and the data
 
 First things first, clone this repo and get the human3.6m dataset on exponential map format.
 
 ```bash
-git clone https://github.com/una-dinosauria/human-motion-prediction.git
-cd human-motion-prediction
+git clone https://github.com/enriccorona/human-motion-prediction-pytorch.git
+cd human-motion-prediction-pytorch
 mkdir data
 cd data
 wget http://www.cs.stanford.edu/people/ashesh/h3.6m.zip
@@ -31,6 +33,8 @@ cd ..
 ```
 
 ### Quick demo and visualization
+
+The code in this fork should work exactly as in the original repo:
 
 For a quick demo, you can train for a few iterations and visualize the outputs
 of your model.
@@ -85,9 +89,6 @@ You can substitute the `--action walking` parameter for any action in
 ```
 
 or `--action all` (default) to train on all actions.
-
-The code will log the error in Euler angles for each action to [tensorboard](https://www.tensorflow.org/get_started/summaries_and_tensorboard). You can track the progress during training by typing `tensorboard --logdir experiments` in the terminal and checking the board under http://127.0.1.1:6006/ in your browser (occasionally, tensorboard might pick another url).
-
 
 ### Citing
 
