@@ -75,7 +75,7 @@ parser.add_argument('--omit_one_hot', dest='omit_one_hot',
 # Directories
 parser.add_argument('--data_dir', dest='data_dir',
                   help='Data directory',
-                  default=os.path.normpath("../../mocap-mtds/data/"), type=str)
+                  default=os.path.normpath("../../mocap-mtds/"), type=str)
 parser.add_argument('--train_dir', dest='train_dir',
                   help='Training directory',
                   default=os.path.normpath("./experiments/"), type=str)
@@ -97,7 +97,6 @@ assert args.omit_one_hot, "not implemented yet"
 assert args.action == "walking", "not implemented yet"
 assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
 assert args.num_layers == 1, "not implemented yet. (Also not in original fork.)"
-assert args.use_cpu, "need to check that there are no hardcoded CPU things about."
 
 train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'out_{0}'.format(args.seq_length_out),
@@ -244,11 +243,11 @@ def train():
           print(" {0:5d} |".format(ms), end="")
         print()
 
-        mean_loss = step_loss.mean(axis=0).numpy()
+        mean_loss = step_loss.detach().cpu().mean(dim=0).numpy()
         mean_loss = mean_loss.mean(axis=1)
 
         # Pretty print of the results for 80, 160, 320, 400, 560 and 1000 ms
-        print("{0: <16} |".format(action), end="")
+        print("{0: <16} |".format(" "), end="")
         for ms in [1,7,15,24,37,49,62]:
           if args.seq_length_out >= ms+1:
             print(" {0:.3f} |".format( mean_loss[ms] ), end="")
