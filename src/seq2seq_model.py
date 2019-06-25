@@ -19,7 +19,7 @@ import torch.nn.functional as F
 #import rnn_cell_extensions # my extensions of the tf repos
 import data_utils
 
-use_cuda=True
+use_cuda=False
 
 class Seq2SeqModel(nn.Module):
   """Sequence-to-sequence model for human motion prediction"""

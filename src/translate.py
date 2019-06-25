@@ -73,7 +73,7 @@ parser.add_argument('--omit_one_hot', dest='omit_one_hot',
 # Directories
 parser.add_argument('--data_dir', dest='data_dir',
                   help='Data directory',
-                  default=os.path.normpath("./data/h3.6m/dataset"), type=str)
+                  default=os.path.normpath("../../data/mocap/h3.6m/dataset"), type=str)
 parser.add_argument('--train_dir', dest='train_dir',
                   help='Training directory',
                   default=os.path.normpath("./experiments/"), type=str)
