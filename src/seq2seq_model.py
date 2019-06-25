@@ -19,8 +19,6 @@ import torch.nn.functional as F
 #import rnn_cell_extensions # my extensions of the tf repos
 import data_utils
 
-use_cuda=False
-
 class Seq2SeqModel(nn.Module):
   """Sequence-to-sequence model for human motion prediction"""
 
@@ -39,7 +37,8 @@ class Seq2SeqModel(nn.Module):
                one_hot=True,
                residual_velocities=False,
                dropout=0.0,
-               dtype=torch.float32):
+               dtype=torch.float32,
+               num_traj=0):
     """Create the model.
 
     Args:
@@ -64,8 +63,8 @@ class Seq2SeqModel(nn.Module):
     """
     super(Seq2SeqModel, self).__init__()
 
-    self.HUMAN_SIZE = 54
-    self.input_size = self.HUMAN_SIZE + number_of_actions if one_hot else self.HUMAN_SIZE
+    self.HUMAN_SIZE = 64
+    self.input_size = self.HUMAN_SIZE + num_traj + (number_of_actions if one_hot else 0)
 
     print( "One hot is ", one_hot )
     print( "Input size is %d" % self.input_size )
@@ -83,10 +82,10 @@ class Seq2SeqModel(nn.Module):
     self.cell = torch.nn.GRUCell(self.input_size, self.rnn_size)
 #    self.cell2 = torch.nn.GRUCell(self.rnn_size, self.rnn_size)
 
-    self.fc1 = nn.Linear(self.rnn_size, self.input_size)
+    self.fc1 = nn.Linear(self.rnn_size, self.HUMAN_SIZE)
 
 
-  def forward(self, encoder_inputs, decoder_inputs):
+  def forward(self, encoder_inputs, decoder_inputs, use_cuda):
     def loop_function(prev, i):
         return prev
 
@@ -111,7 +110,7 @@ class Seq2SeqModel(nn.Module):
     prev = None
     for i, inp in enumerate(decoder_inputs):
       if loop_function is not None and prev is not None:
-          inp = loop_function(prev, i)
+          inp = torch.cat((loop_function(prev, i), inp[:, self.HUMAN_SIZE:]), 1)
 
       inp = inp.detach()
 
@@ -121,9 +120,9 @@ class Seq2SeqModel(nn.Module):
 #      output = inp + self.fc1(state2)
       
 #      state = F.dropout(state, self.dropout, training=self.training)
-      output = inp + self.fc1(F.dropout(state, self.dropout, training=self.training))
+      output = inp[:, 0:self.HUMAN_SIZE] + self.fc1(F.dropout(state, self.dropout, training=self.training))
 
-      outputs.append(output.view([1, batchsize, self.input_size]))
+      outputs.append(output.view([1, batchsize, self.HUMAN_SIZE]))
       if loop_function is not None:
         prev = output
 
@@ -133,7 +132,7 @@ class Seq2SeqModel(nn.Module):
     return torch.transpose(outputs, 0, 1)
 
 
-  def get_batch( self, data, actions ):
+  def get_batch( self, data_Y, data_U, actions ):
     """Get a random batch of data from the specified bucket, prepare for step.
 
     Args
@@ -145,33 +144,38 @@ class Seq2SeqModel(nn.Module):
     """
 
     # Select entries at random
-    all_keys    = list(data.keys())
-    chosen_keys = np.random.choice( len(all_keys), self.batch_size )
+    probs    = np.array([y.shape[0] for y in data_Y])
+    probs    = probs / probs.sum()
+    chosen_keys = np.random.choice( len(data_Y), self.batch_size, p=probs)
 
     # How many frames in total do we need?
     total_frames = self.source_seq_len + self.target_seq_len
+    traj_size = data_U[1].shape[1]
 
     encoder_inputs  = np.zeros((self.batch_size, self.source_seq_len-1, self.input_size), dtype=float)
     decoder_inputs  = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
-    decoder_outputs = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
+    decoder_outputs = np.zeros((self.batch_size, self.target_seq_len, self.HUMAN_SIZE), dtype=float)
 
     for i in xrange( self.batch_size ):
 
-      the_key = all_keys[ chosen_keys[i] ]
+      the_key = chosen_keys[i]
 
       # Get the number of frames
-      n, _ = data[ the_key ].shape
+      n = data_Y[ the_key ].shape[0]
 
       # Sample somewherein the middle
-      idx = np.random.randint( 16, n-total_frames )
+      idx = np.random.randint( 1, n-total_frames )
 
       # Select the data around the sampled points
-      data_sel = data[ the_key ][idx:idx+total_frames ,:]
+      data_Y_sel = data_Y[ the_key ][idx:idx + total_frames, :]
+      data_U_sel = data_U[ the_key ][idx:idx + total_frames, :]
 
       # Add the data
-      encoder_inputs[i,:,0:self.input_size]  = data_sel[0:self.source_seq_len-1, :]
-      decoder_inputs[i,:,0:self.input_size]  = data_sel[self.source_seq_len-1:self.source_seq_len+self.target_seq_len-1, :]
-      decoder_outputs[i,:,0:self.input_size] = data_sel[self.source_seq_len:, 0:self.input_size]
+      encoder_inputs[i,:,0:self.HUMAN_SIZE]  = data_Y_sel[0:self.source_seq_len-1, :]
+      encoder_inputs[i, :, self.HUMAN_SIZE:] = data_U_sel[0:self.source_seq_len-1, :]  # <= done
+      decoder_inputs[i,:,0:self.HUMAN_SIZE]  = data_Y_sel[self.source_seq_len-1:self.source_seq_len+self.target_seq_len-1, :]
+      decoder_inputs[i,:,self.HUMAN_SIZE:]  = data_U_sel[self.source_seq_len-1:self.source_seq_len + self.target_seq_len-1, :]
+      decoder_outputs[i,:,0:self.HUMAN_SIZE] = data_Y_sel[self.source_seq_len:self.source_seq_len + self.target_seq_len, :]    # <= done
 
     return encoder_inputs, decoder_inputs, decoder_outputs
 

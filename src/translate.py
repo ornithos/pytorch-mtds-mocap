@@ -24,6 +24,8 @@ import argparse
 
 # Learning
 parser = argparse.ArgumentParser(description='Train RNN for human pose estimation')
+parser.add_argument('--style_ix', dest='style_ix',
+                  help='Style index to hold out', type=int, required=True)
 parser.add_argument('--learning_rate', dest='learning_rate',
                   help='Learning rate',
                   default=0.005, type=float)
@@ -54,7 +56,7 @@ parser.add_argument('--loss_to_use', dest='loss_to_use',
                   default='sampling_based', type=str)
 parser.add_argument('--residual_velocities', dest='residual_velocities',
                   help='Add a residual connection that effectively models velocities',action='store_true',
-                  default=False)
+                  default=True)
 parser.add_argument('--size', dest='size',
                   help='Size of each model layer.',
                   default=1024, type=int)
@@ -63,23 +65,23 @@ parser.add_argument('--num_layers', dest='num_layers',
                   default=1, type=int)
 parser.add_argument('--seq_length_in', dest='seq_length_in',
                   help='Number of frames to feed into the encoder. 25 fp',
-                  default=50, type=int)
+                  default=64, type=int)
 parser.add_argument('--seq_length_out', dest='seq_length_out',
                   help='Number of frames that the decoder has to predict. 25fps',
-                  default=10, type=int)
+                  default=64, type=int)
 parser.add_argument('--omit_one_hot', dest='omit_one_hot',
                   help='', action='store_true',
-                  default=False)
+                  default=True)
 # Directories
 parser.add_argument('--data_dir', dest='data_dir',
                   help='Data directory',
-                  default=os.path.normpath("../../data/mocap/h3.6m/dataset"), type=str)
+                  default=os.path.normpath("../../mocap-mtds/data/"), type=str)
 parser.add_argument('--train_dir', dest='train_dir',
                   help='Training directory',
                   default=os.path.normpath("./experiments/"), type=str)
 parser.add_argument('--action', dest='action',
                   help='The action to train on. all means all the actions, all_periodic means walking, eating and smoking',
-                  default='all', type=str)
+                  default='walking', type=str)
 parser.add_argument('--use_cpu', dest='use_cpu',
                   help='', action='store_true',
                   default=False)
@@ -91,6 +93,11 @@ parser.add_argument('--sample', dest='sample',
                   default=False)
 
 args = parser.parse_args()
+assert args.omit_one_hot, "not implemented yet"
+assert args.action == "walking", "not implemented yet"
+assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
+assert args.num_layers == 1, "not implemented yet. (Also not in original fork.)"
+assert args.use_cpu, "need to check that there are no hardcoded CPU things about."
 
 train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'out_{0}'.format(args.seq_length_out),
@@ -123,7 +130,8 @@ def create_model(actions, sampling=False):
       len( actions ),
       not args.omit_one_hot,
       args.residual_velocities,
-      dtype=torch.float32)
+      dtype=torch.float32,
+      num_traj=44)
 
   if args.load <= 0:
     return model
@@ -143,8 +151,8 @@ def train():
 
   number_of_actions = len( actions )
 
-  train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_data(
-    actions, args.seq_length_in, args.seq_length_out, args.data_dir, not args.omit_one_hot )
+  train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(
+    args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix)
 
   # Limit TF to take a fraction of the GPU memory
 
@@ -153,13 +161,7 @@ def train():
     if not args.use_cpu:
         model = model.cuda()
 
-    # === Read and denormalize the gt with srnn's seeds, as we'll need them
-    # many times for evaluation in Euler Angles ===
-    srnn_gts_euler = get_srnn_gts( actions, model, test_set, data_mean,
-                              data_std, dim_to_ignore, not args.omit_one_hot )
-
     #=== This is the training loop ===
-    step_time, loss, val_loss = 0.0, 0.0, 0.0
     current_step = 0 if args.load <= 0 else args.load + 1
     previous_losses = []
 
@@ -176,7 +178,7 @@ def train():
       # Actual training
 
       # === Training step ===
-      encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch( train_set, not args.omit_one_hot )
+      encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(train_set_Y, train_set_U, not args.omit_one_hot)
       encoder_inputs = torch.from_numpy(encoder_inputs).float()
       decoder_inputs = torch.from_numpy(decoder_inputs).float()
       decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -188,7 +190,7 @@ def train():
       decoder_inputs = Variable(decoder_inputs)
       decoder_outputs = Variable(decoder_outputs)
 
-      preds = model(encoder_inputs, decoder_inputs)
+      preds = model(encoder_inputs, decoder_inputs, not args.use_cpu)
 
       step_loss = (preds-decoder_outputs)**2
       step_loss = step_loss.mean()
@@ -217,8 +219,8 @@ def train():
       if current_step % args.test_every == 0:
         model.eval()
 
-        # === Validation with randomly chosen seeds ===
-        encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch( test_set, not args.omit_one_hot )
+        # === Validation with random data from test set ===
+        encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(test_set_Y, test_set_U, not args.omit_one_hot)
         encoder_inputs = torch.from_numpy(encoder_inputs).float()
         decoder_inputs = torch.from_numpy(decoder_inputs).float()
         decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -230,96 +232,29 @@ def train():
         decoder_inputs = Variable(decoder_inputs)
         decoder_outputs = Variable(decoder_outputs)
   
-        preds = model(encoder_inputs, decoder_inputs)
+        preds = model(encoder_inputs, decoder_inputs, not args.use_cpu)
   
         step_loss = (preds-decoder_outputs)**2
-        step_loss = step_loss.mean()
 
-        val_loss = step_loss # Loss book-keeping
+        val_loss = step_loss.mean() # Loss book-keeping
 
         print()
         print("{0: <16} |".format("milliseconds"), end="")
-        for ms in [80, 160, 320, 400, 560, 1000]:
+        for ms in [80, 320, 640, 1000, 1520, 2000, 2520]:
           print(" {0:5d} |".format(ms), end="")
         print()
 
-        # === Validation with srnn's seeds ===
-        for action in actions:
+        mean_loss = step_loss.mean(axis=0).numpy()
+        mean_loss = mean_loss.mean(axis=1)
 
-          # Evaluate the model on the test batches
-          encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch_srnn( test_set, action )
-          #### Evaluate model on action
-  
-          encoder_inputs = torch.from_numpy(encoder_inputs).float()
-          decoder_inputs = torch.from_numpy(decoder_inputs).float()
-          decoder_outputs = torch.from_numpy(decoder_outputs).float()
-          if not args.use_cpu:
-            encoder_inputs = encoder_inputs.cuda()
-            decoder_inputs = decoder_inputs.cuda()
-            decoder_outputs = decoder_outputs.cuda()
-          encoder_inputs = Variable(encoder_inputs)
-          decoder_inputs = Variable(decoder_inputs)
-          decoder_outputs = Variable(decoder_outputs)
-    
-          srnn_poses = model(encoder_inputs, decoder_inputs)
-
-
-          srnn_loss = (srnn_poses - decoder_outputs)**2
-          srnn_loss.cpu().data.numpy()
-          srnn_loss = srnn_loss.mean()
-
-          srnn_poses = srnn_poses.cpu().data.numpy()
-          srnn_poses = srnn_poses.transpose([1,0,2])
-
-          srnn_loss = srnn_loss.cpu().data.numpy()
-          # Denormalize the output
-          srnn_pred_expmap = data_utils.revert_output_format( srnn_poses,
-            data_mean, data_std, dim_to_ignore, actions, not args.omit_one_hot )
-
-          # Save the errors here
-          mean_errors = np.zeros( (len(srnn_pred_expmap), srnn_pred_expmap[0].shape[0]) )
-
-          # Training is done in exponential map, but the error is reported in
-          # Euler angles, as in previous work.
-          # See https://github.com/asheshjain399/RNNexp/issues/6#issuecomment-247769197
-          N_SEQUENCE_TEST = 8
-          for i in np.arange(N_SEQUENCE_TEST):
-            eulerchannels_pred = srnn_pred_expmap[i]
-
-            # Convert from exponential map to Euler angles
-            for j in np.arange( eulerchannels_pred.shape[0] ):
-              for k in np.arange(3,97,3):
-                eulerchannels_pred[j,k:k+3] = data_utils.rotmat2euler(
-                  data_utils.expmap2rotmat( eulerchannels_pred[j,k:k+3] ))
-
-            # The global translation (first 3 entries) and global rotation
-            # (next 3 entries) are also not considered in the error, so the_key
-            # are set to zero.
-            # See https://github.com/asheshjain399/RNNexp/issues/6#issuecomment-249404882
-            gt_i=np.copy(srnn_gts_euler[action][i])
-            gt_i[:,0:6] = 0
-
-            # Now compute the l2 error. The following is numpy port of the error
-            # function provided by Ashesh Jain (in matlab), available at
-            # https://github.com/asheshjain399/RNNexp/blob/srnn/structural_rnn/CRFProblems/H3.6m/dataParser/Utils/motionGenerationError.m#L40-L54
-            idx_to_use = np.where( np.std( gt_i, 0 ) > 1e-4 )[0]
-            
-            euc_error = np.power( gt_i[:,idx_to_use] - eulerchannels_pred[:,idx_to_use], 2)
-            euc_error = np.sum(euc_error, 1)
-            euc_error = np.sqrt( euc_error )
-            mean_errors[i,:] = euc_error
-
-          # This is simply the mean error over the N_SEQUENCE_TEST examples
-          mean_mean_errors = np.mean( mean_errors, 0 )
-
-          # Pretty print of the results for 80, 160, 320, 400, 560 and 1000 ms
-          print("{0: <16} |".format(action), end="")
-          for ms in [1,3,7,9,13,24]:
-            if args.seq_length_out >= ms+1:
-              print(" {0:.3f} |".format( mean_mean_errors[ms] ), end="")
-            else:
-              print("   n/a |", end="")
-          print()
+        # Pretty print of the results for 80, 160, 320, 400, 560 and 1000 ms
+        print("{0: <16} |".format(action), end="")
+        for ms in [1,7,15,24,37,49,62]:
+          if args.seq_length_out >= ms+1:
+            print(" {0:.3f} |".format( mean_loss[ms] ), end="")
+          else:
+            print("   n/a |", end="")
+        print()
 
         print()
         print("============================\n"
@@ -328,11 +263,10 @@ def train():
               "Step-time (ms):     %.4f\n"
               "Train loss avg:      %.4f\n"
               "--------------------------\n"
-              "Val loss:            %.4f\n"
-              "srnn loss:           %.4f\n"
+              "Test loss:            %.4f\n"
               "============================" % (current_step,
               args.learning_rate, step_time*1000, loss,
-              val_loss, srnn_loss))
+              val_loss))
 
         torch.save(model, train_dir + '/model_' + str(current_step))
 
@@ -436,7 +370,7 @@ def sample():
       decoder_inputs = Variable(decoder_inputs)
       decoder_outputs = Variable(decoder_outputs)
 
-      srnn_poses = model(encoder_inputs, decoder_inputs)
+      srnn_poses = model(encoder_inputs, decoder_inputs, not args.use_cpu)
 
       srnn_loss = (srnn_poses - decoder_outputs)**2
       srnn_loss.cpu().data.numpy()
@@ -521,7 +455,7 @@ def define_actions( action ):
   raise( ValueError, "Unrecognized action: %d" % action )
 
 
-def read_all_data( actions, seq_length_in, seq_length_out, data_dir, one_hot ):
+def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
   """
   Loads data for training/testing and normalizes it.
 
@@ -544,21 +478,20 @@ def read_all_data( actions, seq_length_in, seq_length_out, data_dir, one_hot ):
   print ("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
            seq_length_in, seq_length_out))
 
-  train_subject_ids = [1,6,7,8,9,11]
-  test_subject_ids = [5]
+  style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
+  train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1,9) if i != style_ix])
+  train_set_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps.npz"))
+  train_set_U = np.load(os.path.join(data_dir, "edin_Us_30fps.npz"))
 
-  train_set, complete_train = data_utils.load_data( data_dir, train_subject_ids, actions, one_hot )
-  test_set,  complete_test  = data_utils.load_data( data_dir, test_subject_ids,  actions, one_hot )
+  test_set_Y = [train_set_Y[str(i)] for i in style_lkp[str(style_ix)]]
+  test_set_U = [train_set_U[str(i)] for i in style_lkp[str(style_ix)]]
+  train_set_Y = [train_set_Y[str(i)] for i in train_ixs]
+  train_set_U = [train_set_U[str(i)] for i in train_ixs]
 
-  # Compute normalization stats
-  data_mean, data_std, dim_to_ignore, dim_to_use = data_utils.normalization_stats(complete_train)
 
-  # Normalize -- subtract mean, divide by stdev
-  train_set = data_utils.normalize_data( train_set, data_mean, data_std, dim_to_use, actions, one_hot )
-  test_set  = data_utils.normalize_data( test_set,  data_mean, data_std, dim_to_use, actions, one_hot )
   print("done reading data.")
 
-  return train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use
+  return train_set_Y, train_set_U, test_set_Y, test_set_U
 
 
 def main():
