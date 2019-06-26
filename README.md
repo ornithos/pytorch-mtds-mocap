@@ -1,4 +1,21 @@
 
+## Human Motion Prediction using Martinez et al. model
+
+Fork => use for locomotion style data from Mason et al. 2018 (Few shot learning).
+
+While the pytorch fork of Martinez' original code quietly removes some features (e.g. the option of residual layer; this is now always on, despite the argument. Make sure the args are plumbed in before you use them!), I've bluntly destroyed a lot more. Actions are ignored, and one-hot inputs are also not currently present. Hence I highly highly recommend you following the fork back to the original code, or at least the pytorch version. Nevertheless, the following commands apparently work:
+
+#### Train:
+```bash
+python translate.py --action walking --seq_length_out 64 --iterations 5000  --style_ix 1 --learning_rate 0.005
+```
+#### Generate data:
+```bash
+python translate.py --action walking --seq_length_out 64 --style_ix ${i} --use_cpu --load ../experiments/model_${i}_5000_res --sample
+```
+## Original (pytorch) readme below:
+------------
+
 ## human-motion-prediction
 
 This is a pytorch implementation of the paper
