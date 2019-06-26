@@ -75,7 +75,8 @@ parser.add_argument('--omit_one_hot', dest='omit_one_hot',
 # Directories
 parser.add_argument('--data_dir', dest='data_dir',
                   help='Data directory',
-                  default=os.path.normpath("../../mocap-mtds/"), type=str)
+                  # default=os.path.normpath("../../mocap-mtds/"), type=str)
+                  default=os.path.normpath("../../mocap-mtds/data/"), type=str)
 parser.add_argument('--train_dir', dest='train_dir',
                   help='Training directory',
                   default=os.path.normpath("./experiments/"), type=str)
@@ -87,7 +88,7 @@ parser.add_argument('--use_cpu', dest='use_cpu',
                   default=False)
 parser.add_argument('--load', dest='load',
                   help='Try to load a previous checkpoint.',
-                  default=0, type=int)
+                  default='', type=str)
 parser.add_argument('--sample', dest='sample',
                   help='Set to True for sampling.', action='store_true',
                   default=False)
@@ -118,8 +119,8 @@ def create_model(actions, sampling=False):
 
   model = seq2seq_model.Seq2SeqModel(
       args.architecture,
-      args.seq_length_in if not sampling else 50,
-      args.seq_length_out if not sampling else 100,
+      args.seq_length_in,
+      args.seq_length_out,
       args.size, # hidden layer size
       args.num_layers,
       args.max_gradient_norm,
@@ -133,14 +134,11 @@ def create_model(actions, sampling=False):
       dtype=torch.float32,
       num_traj=44)
 
-  if args.load <= 0:
+  if len(args.load) <= 0:
     return model
 
   print("Loading model")
-  model = torch.load(train_dir + '/model_' + str(args.load))
-  if sampling:
-    model.source_seq_len = 50
-    model.target_seq_len = 100
+  model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
   return model
 
 
@@ -162,7 +160,11 @@ def train():
         model = model.cuda()
 
     #=== This is the training loop ===
-    current_step = 0 if args.load <= 0 else args.load + 1
+
+    current_step = 0
+    if len(args.load) > 0:
+        Exception("Training from load file no longer supported in this fork.")
+
     previous_losses = []
 
     step_time, loss = 0, 0
@@ -323,107 +325,55 @@ def get_srnn_gts( actions, model, test_set, data_mean, data_std, dim_to_ignore, 
 
 
 def sample():
-  """Sample predictions for srnn's seeds"""
-  actions = define_actions( args.action )
+    """Sample predictions for srnn's seeds"""
+    actions = define_actions(args.action)
 
-  if True:
-    # === Create the model ===
-    print("Creating %d layers of %d units." % (args.num_layers, args.size))
-    sampling     = True
-    model = create_model(actions, sampling)
-    if not args.use_cpu:
-        model = model.cuda()
-    print("Model created")
+    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(
+        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix)
 
-    # Load all the data
-    train_set, test_set, data_mean, data_std, dim_to_ignore, dim_to_use = read_all_data(
-      actions, args.seq_length_in, args.seq_length_out, args.data_dir, not args.omit_one_hot )
+    if True:
+        # === Create the model ===
+        print("Creating %d layers of %d units." % (args.num_layers, args.size))
+        sampling = True
+        model = create_model(actions, sampling)
+        if not args.use_cpu:
+            model = model.cuda()
+        print("Model created")
 
-    # === Read and denormalize the gt with srnn's seeds, as we'll need them
-    # many times for evaluation in Euler Angles ===
-    srnn_gts_expmap = get_srnn_gts( actions, model, test_set, data_mean,
-                              data_std, dim_to_ignore, not args.omit_one_hot, to_euler=False )
-    srnn_gts_euler = get_srnn_gts( actions, model, test_set, data_mean,
-                              data_std, dim_to_ignore, not args.omit_one_hot )
+        # Clean and create a new h5 file of samples
+        SAMPLES_FNAME = 'samples.h5'
+        try:
+            os.remove(SAMPLES_FNAME)
+        except OSError:
+            pass
 
-    # Clean and create a new h5 file of samples
-    SAMPLES_FNAME = 'samples.h5'
-    try:
-      os.remove( SAMPLES_FNAME )
-    except OSError:
-      pass
+        # Make prediction with srnn' seeds
+        encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
+        encoder_inputs = torch.from_numpy(encoder_inputs).float()
+        decoder_inputs = torch.from_numpy(decoder_inputs).float()
+        decoder_outputs = torch.from_numpy(decoder_outputs).float()
+        if not args.use_cpu:
+            encoder_inputs = encoder_inputs.cuda()
+            decoder_inputs = decoder_inputs.cuda()
+            decoder_outputs = decoder_outputs.cuda()
+        encoder_inputs = Variable(encoder_inputs)
+        decoder_inputs = Variable(decoder_inputs)
+        decoder_outputs = Variable(decoder_outputs)
 
-    # Predict and save for each action
-    for action in actions:
+        preds = model(encoder_inputs, decoder_inputs, not args.use_cpu)
 
-      # Make prediction with srnn' seeds
-      encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch_srnn( test_set, action )
+        loss = (preds - decoder_outputs) ** 2
+        loss.cpu().data.numpy()
+        loss = loss.mean()
 
-      encoder_inputs = torch.from_numpy(encoder_inputs).float()
-      decoder_inputs = torch.from_numpy(decoder_inputs).float()
-      decoder_outputs = torch.from_numpy(decoder_outputs).float()
-      if not args.use_cpu:
-        encoder_inputs = encoder_inputs.cuda()
-        decoder_inputs = decoder_inputs.cuda()
-        decoder_outputs = decoder_outputs.cuda()
-      encoder_inputs = Variable(encoder_inputs)
-      decoder_inputs = Variable(decoder_inputs)
-      decoder_outputs = Variable(decoder_outputs)
+        preds = preds.cpu().data.numpy()
+        preds = preds.transpose([1, 0, 2])
 
-      srnn_poses = model(encoder_inputs, decoder_inputs, not args.use_cpu)
+        loss = loss.cpu().data.numpy()
 
-      srnn_loss = (srnn_poses - decoder_outputs)**2
-      srnn_loss.cpu().data.numpy()
-      srnn_loss = srnn_loss.mean()
+        np.savez("predictions_{0}.npz".format(args.style_ix), preds=preds, actual=decoder_outputs)
 
-      srnn_poses = srnn_poses.cpu().data.numpy()
-      srnn_poses = srnn_poses.transpose([1,0,2])
-
-      srnn_loss = srnn_loss.cpu().data.numpy()
-      # denormalizes too
-      srnn_pred_expmap = data_utils.revert_output_format(srnn_poses, data_mean, data_std, dim_to_ignore, actions, not args.omit_one_hot )
-
-      # Save the samples
-      with h5py.File( SAMPLES_FNAME, 'a' ) as hf:
-        for i in np.arange(8):
-          # Save conditioning ground truth
-          node_name = 'expmap/gt/{1}_{0}'.format(i, action)
-          hf.create_dataset( node_name, data=srnn_gts_expmap[action][i] )
-          # Save prediction
-          node_name = 'expmap/preds/{1}_{0}'.format(i, action)
-          hf.create_dataset( node_name, data=srnn_pred_expmap[i] )
-
-      # Compute and save the errors here
-      mean_errors = np.zeros( (len(srnn_pred_expmap), srnn_pred_expmap[0].shape[0]) )
-
-      for i in np.arange(8):
-
-        eulerchannels_pred = srnn_pred_expmap[i]
-
-        for j in np.arange( eulerchannels_pred.shape[0] ):
-          for k in np.arange(3,97,3):
-            eulerchannels_pred[j,k:k+3] = data_utils.rotmat2euler(
-              data_utils.expmap2rotmat( eulerchannels_pred[j,k:k+3] ))
-
-        eulerchannels_pred[:,0:6] = 0
-
-        # Pick only the dimensions with sufficient standard deviation. Others are ignored.
-        idx_to_use = np.where( np.std( eulerchannels_pred, 0 ) > 1e-4 )[0]
-
-        euc_error = np.power( srnn_gts_euler[action][i][:,idx_to_use] - eulerchannels_pred[:,idx_to_use], 2)
-        euc_error = np.sum(euc_error, 1)
-        euc_error = np.sqrt( euc_error )
-        mean_errors[i,:] = euc_error
-
-      mean_mean_errors = np.mean( mean_errors, 0 )
-      print( action )
-      print( ','.join(map(str, mean_mean_errors.tolist() )) )
-
-      with h5py.File( SAMPLES_FNAME, 'a' ) as hf:
-        node_name = 'mean_{0}_error'.format( action )
-        hf.create_dataset( node_name, data=mean_mean_errors )
-
-  return
+    return
 
 
 def define_actions( action ):
@@ -482,12 +432,13 @@ def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
   train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1,9) if i != style_ix])
   train_set_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps.npz"))
   train_set_U = np.load(os.path.join(data_dir, "edin_Us_30fps.npz"))
-
-  test_set_Y = [train_set_Y[str(i)] for i in style_lkp[str(style_ix)]]
-  test_set_U = [train_set_U[str(i)] for i in style_lkp[str(style_ix)]]
   train_set_Y = [train_set_Y[str(i)] for i in train_ixs]
   train_set_U = [train_set_U[str(i)] for i in train_ixs]
 
+  test_set_Y = np.load(os.path.join(data_dir, "test_input_{0}_y.npz".format(style_ix)))
+  test_set_U = np.load(os.path.join(data_dir, "test_input_{0}_u.npz".format(style_ix)))
+  test_set_Y = [test_set_Y[str(i+1)] for i in range(len(test_set_Y))]
+  test_set_U = [test_set_U[str(i+1)] for i in range(len(test_set_U))]
 
   print("done reading data.")
 

@@ -179,6 +179,52 @@ class Seq2SeqModel(nn.Module):
 
     return encoder_inputs, decoder_inputs, decoder_outputs
 
+  def get_test_batch( self, data_Y, data_U, batch_size):
+    """Get a random batch of data from the specified bucket, prepare for step.
+
+    Args
+      data: a list of sequences of size n-by-d to fit the model to.
+      actions: a list of the actions we are using
+    Returns
+      The tuple (encoder_inputs, decoder_inputs, decoder_outputs);
+      the constructed batches have the proper format to call step(...) later.
+    """
+
+    k_ahead = 6
+
+    if batch_size <= 0:
+        batch_size = len(data_Y)-k_ahead
+        chosen_keys = range(batch_size)
+    else:
+        chosen_keys = np.random.choice(len(data_Y)-k_ahead, batch_size, replace=batch_size > len(data_Y)-k_ahead)
+
+    # How many frames in total do we need?
+    source_len = 64
+    target_len = 64*k_ahead
+    total_frames = self.source_seq_len*(k_ahead+1)
+
+    encoder_inputs  = np.zeros((batch_size, source_len-1, self.input_size), dtype=float)
+    decoder_inputs  = np.zeros((batch_size, target_len, self.input_size), dtype=float)
+    decoder_outputs = np.zeros((batch_size, target_len, self.HUMAN_SIZE), dtype=float)
+
+    for i in chosen_keys:
+      # Add the data
+      encoder_inputs[i, :, 0:self.HUMAN_SIZE] = data_Y[i].T[0:source_len-1, :]
+      encoder_inputs[i, :, self.HUMAN_SIZE:]  = data_U[i].T[0:source_len-1, :]
+
+      decoder_inputs[i, 0, 0:self.HUMAN_SIZE] = data_Y[i].T[source_len-1, :]
+      decoder_inputs[i, 0, self.HUMAN_SIZE:]  = data_U[i].T[source_len-1, :]
+      for k in range(k_ahead-1):
+          decoder_inputs[i, 64*k+1:64*(k+1)+1, 0:self.HUMAN_SIZE]   = data_Y[i+1+k].T
+          decoder_inputs[i, 64*k+1:64*(k+1)+1, self.HUMAN_SIZE:]    = data_U[i+1+k].T
+          decoder_outputs[i, 64*k:64*(k+1), :] = data_Y[i+1+k].T
+      decoder_inputs[i, 64*(k_ahead-1)+1:64*k_ahead+1, 0:self.HUMAN_SIZE] = data_Y[i+k_ahead].T[0:63,:]
+      decoder_inputs[i, 64*(k_ahead-1)+1:64*k_ahead+1, self.HUMAN_SIZE:]  = data_U[i+k_ahead].T[0:63,:]
+      decoder_outputs[i, 64*(k_ahead-1):64*k_ahead, :] = data_Y[i+k_ahead].T
+
+
+    return encoder_inputs, decoder_inputs, decoder_outputs
+
 
   def find_indices_srnn( self, data, action ):
     """
