@@ -212,7 +212,8 @@ def train():
       # === step decay ===
       if current_step % args.learning_rate_step == 0:
         args.learning_rate = args.learning_rate*args.learning_rate_decay_factor
-        optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas = (0.9, 0.999))
+        for param_group in optimiser.param_groups:
+          param_group['lr'] = args.learning_rate
         print("Decay learning rate. New value at " + str(args.learning_rate))
 
       #cuda.empty_cache()
