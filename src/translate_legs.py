@@ -226,8 +226,7 @@ def train():
                 model.eval()
 
                 # === Validation with random data from test set ===
-                encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(test_set_Y, test_set_U,
-                                                                                  not args.omit_one_hot)
+                encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U,-1)
                 encoder_inputs = torch.from_numpy(encoder_inputs).float()
                 decoder_inputs = torch.from_numpy(decoder_inputs).float()
                 decoder_outputs = torch.from_numpy(decoder_outputs).float()
