@@ -74,8 +74,8 @@ parser.add_argument('--omit_one_hot', dest='omit_one_hot',
 # Directories
 parser.add_argument('--data_dir', dest='data_dir',
                     help='Data directory',
-                    # default=os.path.normpath("../../mocap-mtds/"), type=str)
-                    default=os.path.normpath("../../mocap-mtds/data/"), type=str)
+                    default=os.path.normpath("../../mocap-mtds/"), type=str)
+                    # default=os.path.normpath("../../mocap-mtds/data/"), type=str)
 parser.add_argument('--train_dir', dest='train_dir',
                     help='Training directory',
                     default=os.path.normpath("./experiments/"), type=str)
@@ -196,7 +196,7 @@ def train():
             preds = model(encoder_inputs, decoder_inputs, not args.use_cpu)
 
             step_loss = (preds - decoder_outputs) ** 2
-            step_loss = step_loss * torch.cat((torch.ones(1,1,3)*25, torch.ones(1,1,28-3)), dim=2)
+            step_loss = step_loss * torch.cat((torch.ones(1,1,3)*25, torch.ones(1,1,28-3)), dim=2).cuda()
             step_loss = step_loss.mean()
 
             # Actual backpropagation
