@@ -99,6 +99,9 @@ assert args.action == "walking", "not implemented yet"
 assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
 assert args.num_layers == 1, "not implemented yet. (Also not in original fork.)"
 
+if not os.path.isfile(os.path.join(args.data_dir, "style_lkp.npz")):
+    args.data_dir = os.path.normpath("../../mocap-mtds/data/")
+
 train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'style_{0}'.format(args.style_ix),
   'out_{0}'.format(args.seq_length_out),
