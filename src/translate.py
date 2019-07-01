@@ -75,8 +75,8 @@ parser.add_argument('--omit_one_hot', dest='omit_one_hot',
 # Directories
 parser.add_argument('--data_dir', dest='data_dir',
                   help='Data directory',
-                  # default=os.path.normpath("../../mocap-mtds/"), type=str)
-                  default=os.path.normpath("../../mocap-mtds/data/"), type=str)
+                  default=os.path.normpath("../../mocap-mtds/"), type=str)
+                  # default=os.path.normpath("../../mocap-mtds/data/"), type=str)
 parser.add_argument('--train_dir', dest='train_dir',
                   help='Training directory',
                   default=os.path.normpath("./experiments/"), type=str)
@@ -438,8 +438,8 @@ def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
 
   test_set_Y = np.load(os.path.join(data_dir, "test_input_{0}_y.npz".format(style_ix)))
   test_set_U = np.load(os.path.join(data_dir, "test_input_{0}_u.npz".format(style_ix)))
-  test_set_Y = [test_set_Y[str(i+1)] for i in range(len(test_set_Y))]
-  test_set_U = [test_set_U[str(i+1)] for i in range(len(test_set_U))]
+  test_set_Y = [test_set_Y[str(i+1)] for i in range(len(test_set_Y.keys()))]
+  test_set_U = [test_set_U[str(i+1)] for i in range(len(test_set_U.keys()))]
 
   print("done reading data.")
 
