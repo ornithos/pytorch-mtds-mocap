@@ -131,6 +131,7 @@ def create_model(actions, sampling=False):
       len( actions ),
       not args.omit_one_hot,
       args.residual_velocities,
+      64,
       dtype=torch.float32,
       num_traj=44)
 

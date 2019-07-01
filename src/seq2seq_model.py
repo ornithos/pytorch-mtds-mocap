@@ -36,6 +36,7 @@ class Seq2SeqModel(nn.Module):
                number_of_actions,
                one_hot=True,
                residual_velocities=False,
+               output_dim=64,
                dropout=0.0,
                dtype=torch.float32,
                num_traj=0):
@@ -63,7 +64,7 @@ class Seq2SeqModel(nn.Module):
     """
     super(Seq2SeqModel, self).__init__()
 
-    self.HUMAN_SIZE = 28
+    self.HUMAN_SIZE = output_dim
     self.input_size = self.HUMAN_SIZE + num_traj + (number_of_actions if one_hot else 0)
 
     print( "One hot is ", one_hot )
