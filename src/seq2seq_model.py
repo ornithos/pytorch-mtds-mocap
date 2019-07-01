@@ -63,7 +63,7 @@ class Seq2SeqModel(nn.Module):
     """
     super(Seq2SeqModel, self).__init__()
 
-    self.HUMAN_SIZE = 64
+    self.HUMAN_SIZE = 28
     self.input_size = self.HUMAN_SIZE + num_traj + (number_of_actions if one_hot else 0)
 
     print( "One hot is ", one_hot )
@@ -208,7 +208,7 @@ class Seq2SeqModel(nn.Module):
     decoder_outputs = np.zeros((batch_size, target_len, self.HUMAN_SIZE), dtype=float)
 
     for i in chosen_keys:
-      # Add the data
+      # Add the data    (batch, tt, dd)
       encoder_inputs[i, :, 0:self.HUMAN_SIZE] = data_Y[i].T[0:source_len-1, :]
       encoder_inputs[i, :, self.HUMAN_SIZE:]  = data_U[i].T[0:source_len-1, :]
 
