@@ -172,7 +172,7 @@ def train():
         inputs = Variable(torch.from_numpy(inputs).float())
         outputs = Variable(torch.from_numpy(outputs).float())
         if not args.use_cpu:
-            inputs, outputs, inputs.cuda(), outputs.cuda()
+            inputs, outputs = inputs.cuda(), outputs.cuda()
 
         preds, mu, logstd, state = model(inputs, outputs)
 
