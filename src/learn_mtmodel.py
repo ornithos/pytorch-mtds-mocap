@@ -180,7 +180,7 @@ def train():
         if has_weight:
             sqerr = sqerr * torch.cat((torch.ones(1,1,3) * args.first3_prec, torch.ones(1,1,args.human_size-3)),
                                               dim=2).to(sqerr.device)
-        step_loss = sqerr.mean() / 2
+        step_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
 
         # assume \sigma is const. wrt optimisation, and hence normalising constant can be ignored.
         # Now for KL term. Since we're descending *negative* L.B., we need to *ADD* KL to loss:
@@ -228,7 +228,7 @@ def train():
                 sqerr = sqerr * torch.cat((torch.ones(1,1,3) * args.first3_prec, torch.ones(1,1,args.human_size-3)),
                     dim=2).to(sqerr.device)
 
-            val_loss = sqerr.mean() / 2
+            val_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
             KLD = -0.5 * torch.sum(1 + 2 * logstd - mu.pow(2) - torch.exp(2 * logstd))
             val_loss = val_loss + KLD
 
