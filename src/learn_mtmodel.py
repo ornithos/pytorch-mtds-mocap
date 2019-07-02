@@ -94,7 +94,7 @@ parser.add_argument('--sample', dest='sample',
 args = parser.parse_args()
 assert args.dropout_p == 0.0, "dropout not implemented yet."
 
-if not os.path.isfile(os.path.join(args.data_dir, "style_lkp.npz")):
+if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
     args.data_dir = os.path.normpath("../../mocap-mtds/data/")
 
 train_dir = os.path.normpath(os.path.join(args.train_dir,
@@ -172,7 +172,7 @@ def train():
         inputs = Variable(torch.from_numpy(inputs).float())
         outputs = Variable(torch.from_numpy(outputs).float())
         if not args.use_cpu:
-            inputs, outputs = inputs.cuda(), outputs.cuda()
+            inputs, outputs =  inputs.cuda(), outputs.cuda()
 
         preds, mu, logstd, state = model(inputs, outputs)
 
@@ -180,7 +180,7 @@ def train():
         if has_weight:
             sqerr = sqerr * torch.cat((torch.ones(1,1,3) * args.first3_prec, torch.ones(1,1,args.human_size-3)),
                                               dim=2).to(sqerr.device)
-        step_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
+        step_loss = sqerr.mean() / 2
 
         # assume \sigma is const. wrt optimisation, and hence normalising constant can be ignored.
         # Now for KL term. Since we're descending *negative* L.B., we need to *ADD* KL to loss:
@@ -228,7 +228,7 @@ def train():
                 sqerr = sqerr * torch.cat((torch.ones(1,1,3) * args.first3_prec, torch.ones(1,1,args.human_size-3)),
                     dim=2).to(sqerr.device)
 
-            val_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
+            val_loss = sqerr.mean() / 2
             KLD = -0.5 * torch.sum(1 + 2 * logstd - mu.pow(2) - torch.exp(2 * logstd))
             val_loss = val_loss + KLD
 
@@ -276,32 +276,40 @@ def sample():
 
     train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size)
 
-    model = create_model()
-    model.eval()
-    if not args.use_cpu:
-        model = model.cuda()
-    print("Model created")
+    if True:
+        # === Create the model ===
+        print("Creating %d layers of %d units." % (args.num_layers, args.size))
+        model = create_model()
+        model.eval()
+        if not args.use_cpu:
+            model = model.cuda()
+        print("Model created")
 
-    # Make prediction with srnn' seeds
-    inputs, outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
+        # Make prediction with srnn' seeds
+        encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
+        encoder_inputs = torch.from_numpy(encoder_inputs).float()
+        decoder_inputs = torch.from_numpy(decoder_inputs).float()
+        decoder_outputs = torch.from_numpy(decoder_outputs).float()
+        if not args.use_cpu:
+            encoder_inputs = encoder_inputs.cuda()
+            decoder_inputs = decoder_inputs.cuda()
+            decoder_outputs = decoder_outputs.cuda()
+        encoder_inputs = Variable(encoder_inputs)
+        decoder_inputs = Variable(decoder_inputs)
+        decoder_outputs = Variable(decoder_outputs)
 
-    inputs = Variable(torch.from_numpy(inputs).float())
-    outputs = Variable(torch.from_numpy(outputs).float())
-    if not args.use_cpu:
-        inputs, outputs, inputs.cuda(), outputs.cuda()
+        preds = model(encoder_inputs, decoder_inputs, not args.use_cpu)
 
-    preds, mu, logstd, state = model(inputs, outputs)
+        loss = (preds - decoder_outputs) ** 2
+        loss.cpu().data.numpy()
+        loss = loss.mean()
 
-    loss = (preds - outputs) ** 2
-    loss.cpu().data.numpy()
-    loss = loss.mean()
+        preds = preds.cpu().data.numpy()
+        preds = preds.transpose([1, 0, 2])
 
-    preds = preds.cpu().data.numpy()
-    preds = preds.transpose([1, 0, 2])
+        loss = loss.cpu().data.numpy()
 
-    loss = loss.cpu().data.numpy()
-
-    np.savez("mt_predictions_{0}.npz".format(args.style_ix), preds=preds, actual=outputs)
+        np.savez("predictions_{0}.npz".format(args.style_ix), preds=preds, actual=decoder_outputs)
 
     return
 
