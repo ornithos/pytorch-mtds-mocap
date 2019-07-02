@@ -65,9 +65,12 @@ class MTGRU(nn.Module):
 
         # Encoder weights
         self.encoder_cell = nn.GRUCell(self.HUMAN_SIZE, rnn_encoder_size)
+
         self.to_mu = Parameter(torch.Tensor(rnn_encoder_size, k))
         self.to_lsigma = Parameter(torch.Tensor(rnn_encoder_size, k))
+        self.to_lsigma_bias = Parameter(torch.Tensor(k))
         self.init_weights((self.to_mu, self.to_lsigma))
+        self.to_lsigma_bias.data = - torch.ones_like(self.to_lsigma_bias.data)*0.5  # reduce initial std.
 
         # Psi Decoder weights
         n_psi_pars = sum(self._decoder_par_size())
@@ -128,7 +131,7 @@ class MTGRU(nn.Module):
         for tt in range(1, outputs.shape[0]):
             enc_state = self.encoder_cell(outputs[tt, :, :], enc_state)
 
-        mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma
+        mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(logstd)
