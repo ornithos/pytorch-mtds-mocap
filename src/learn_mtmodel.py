@@ -63,7 +63,8 @@ def create_model_k0(args):
 def train(args):
     """Train a MT model on human motion"""
 
-    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size, args.input_fname)
+    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size,
+                                                                     args.input_fname, args.input_test_fname)
 
     model = create_model(args)
     if not args.use_cpu:
@@ -243,7 +244,7 @@ def sample(args):
     return
 
 
-def read_all_data(data_dir, style_ix, njoints, input_fname):
+def read_all_data(data_dir, style_ix, njoints, input_fname, input_test_fname):
     """
     Loads data for training/testing and normalizes it.
 
@@ -262,6 +263,8 @@ def read_all_data(data_dir, style_ix, njoints, input_fname):
 
     # === Read training data ===
     print("Reading training data (test index {0:d}).".format(style_ix))
+    if input_test_fname == "":
+        input_test_fname = "test_input_{0}_u.npz".format(style_ix)
 
     style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
     train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, 9) if i != style_ix])
@@ -272,7 +275,7 @@ def read_all_data(data_dir, style_ix, njoints, input_fname):
     train_set_U = [train_set_U[str(i)] for i in train_ixs]
 
     test_set_Y = np.load(os.path.join(data_dir, "test_input_{0}_y.npz".format(style_ix)))
-    test_set_U = np.load(os.path.join(data_dir, "test_input_{0}_u.npz".format(style_ix)))
+    test_set_U = np.load(os.path.join(data_dir, input_test_fname))
     test_set_Y = [test_set_Y[str(i + 1)][:njoints, :] for i in range(len(test_set_Y.keys()))]  # whatever, apparently test is transpose of train
     test_set_U = [test_set_U[str(i + 1)] for i in range(len(test_set_U.keys()))]
 
@@ -367,7 +370,10 @@ if __name__ == "__main__":
     parser.add_argument('--sample', dest='sample',
                         help='Set to True for sampling.', action='store_true',
                         default=False)
-    parser.add_argument('--input_fname', dest='input_fname', type=str, help="name of input file", default="edin_Us_30fps.npz")
+    parser.add_argument('--input_fname', dest='input_fname', type=str, help="name of input file",
+                        default="edin_Us_30fps.npz")
+    parser.add_argument('--input_test_fname', dest='input_test_fname', type=str, help="name of test input file",
+                        default="")
 
     args = parser.parse_args()
     assert args.dropout_p == 0.0, "dropout not implemented yet."
