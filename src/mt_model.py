@@ -157,8 +157,11 @@ class MTGRU(nn.Module):
         states = torch.cat(states, dim=0)
         # residual connection?
         if self.residual_output:
-            yhats = yhats + torch.cat((inputs, torch.zeros(batchsize, inputs.size(1),
-                                                           self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
+            if self.HUMAN_SIZE >= self.input_size:
+                yhats = yhats + torch.cat((inputs, torch.zeros(batchsize, inputs.size(1),
+                                                               self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
+            else:
+                yhats = yhats[:, :, :self.input_size] + inputs
 
         return yhats, mu, logstd, states
 
@@ -300,7 +303,15 @@ class OpenLoopGRU(nn.Module):
 
     def forward(self, inputs):
         seq, state = self.rnn(inputs)
-        return self.emission(seq)
+        yhats = self.emission(seq)
+
+        if self.residual_output:
+            if self.HUMAN_SIZE >= self.input_size:
+                yhats = yhats + torch.cat((inputs, torch.zeros(self.batch_size, inputs.size(1),
+                                                               self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
+            else:
+                yhats = yhats[:, :, :self.input_size] + inputs
+        return yhats
 
     def get_batch(self, data_Y, data_U):
         return MTGRU._get_batch(data_Y, data_U, self.batch_size, self.target_seq_len, self.input_size, self.HUMAN_SIZE)

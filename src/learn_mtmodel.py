@@ -320,8 +320,8 @@ if __name__ == "__main__":
                         default=1.0, type=float)
 
     # Architecture
-    parser.add_argument('--residual_velocities', dest='residual_velocities',
-                        help='Add a residual connection that effectively models velocities', action='store_true',
+    parser.add_argument('--no_residual_velocities', dest='residual_velocities',
+                        help='Add a residual connection that effectively models velocities', action='store_false',
                         default=True)
     parser.add_argument('--latent_k', dest='k',
                         help='Dimension of parameter manifold.', type=int, required=True)
