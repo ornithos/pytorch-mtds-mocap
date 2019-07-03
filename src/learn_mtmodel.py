@@ -63,7 +63,7 @@ def create_model_k0(args):
 def train(args):
     """Train a MT model on human motion"""
 
-    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size)
+    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size, args.input_fname)
 
     model = create_model(args)
     if not args.use_cpu:
@@ -243,7 +243,7 @@ def sample(args):
     return
 
 
-def read_all_data(data_dir, style_ix, njoints):
+def read_all_data(data_dir, style_ix, njoints, input_fname):
     """
     Loads data for training/testing and normalizes it.
 
@@ -266,7 +266,7 @@ def read_all_data(data_dir, style_ix, njoints):
     style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
     train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, 9) if i != style_ix])
     train_set_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps.npz"))
-    train_set_U = np.load(os.path.join(data_dir, "edin_Us_30fps.npz"))
+    train_set_U = np.load(os.path.join(data_dir, input_fname))
     njoints = train_set_Y[str(0)].shape[1] if njoints <= 0 else njoints
     train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
     train_set_U = [train_set_U[str(i)] for i in train_ixs]
@@ -367,13 +367,13 @@ if __name__ == "__main__":
     parser.add_argument('--sample', dest='sample',
                         help='Set to True for sampling.', action='store_true',
                         default=False)
-    parser.add_argument('--tag', dest='tag', help='label for model save', type=str, default='')
+    parser.add_argument('--input_fname', dest='input_fname', type=str, help="name of input file", default="edin_Us_30fps.npz")
 
     args = parser.parse_args()
     assert args.dropout_p == 0.0, "dropout not implemented yet."
 
     if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
-        print("Moving datadir from {:s} => ../../mocap-mtds/data/")
+        print("Moving datadir from {:s} => ../../mocap-mtds/data/".format(args.data_dir))
         args.data_dir = os.path.normpath("../../mocap-mtds/data/")
 
     train_dir = os.path.normpath(os.path.join(args.train_dir,
@@ -385,9 +385,8 @@ if __name__ == "__main__":
                                               'psi_lowrank_{0}'.format(args.size_psi_lowrank),
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
+                                              '{0}'.format(args.input_fname.split(".")[0]),
                                               'residual_vel' if args.residual_velocities else 'not_residual_vel'))
-    if not args.tag != '':
-        train_dir = os.path.join(train_dir, args.tag)
 
     print(train_dir)
     os.makedirs(train_dir, exist_ok=True)
