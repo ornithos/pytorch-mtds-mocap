@@ -122,7 +122,7 @@ def train(args):
         # Reporting / admin
         step_loss = step_loss.cpu().data.numpy()
 
-        if True: #current_step % 10 == 0:
+        if current_step % 10 == 0:
             print("step {0:04d}; step_loss: {1:.4f}".format(current_step, step_loss))
 
         step_time += (time.time() - start_time) / args.test_every
@@ -367,11 +367,13 @@ if __name__ == "__main__":
     parser.add_argument('--sample', dest='sample',
                         help='Set to True for sampling.', action='store_true',
                         default=False)
+    parser.add_argument('--tag', dest='tag', help='label for model save', type=str, default='')
 
     args = parser.parse_args()
     assert args.dropout_p == 0.0, "dropout not implemented yet."
 
     if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
+        print("Moving datadir from {:s} => ../../mocap-mtds/data/")
         args.data_dir = os.path.normpath("../../mocap-mtds/data/")
 
     train_dir = os.path.normpath(os.path.join(args.train_dir,
@@ -384,6 +386,8 @@ if __name__ == "__main__":
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
                                               'residual_vel' if args.residual_velocities else 'not_residual_vel'))
+    if not args.tag != '':
+        train_dir = os.path.join(train_dir, args.tag)
 
     print(train_dir)
     os.makedirs(train_dir, exist_ok=True)
