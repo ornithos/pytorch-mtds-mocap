@@ -110,7 +110,7 @@ def train(args):
 
         # assume \sigma is const. wrt optimisation, and hence normalising constant can be ignored.
         # Now for KL term. Since we're descending *negative* L.B., we need to *ADD* KL to loss:
-        if not k0:
+        if is_MT:
             KLD = -0.5 * torch.sum(1 + 2*logstd - mu.pow(2) - torch.exp(2*logstd))
             step_loss = step_loss + KLD
 
