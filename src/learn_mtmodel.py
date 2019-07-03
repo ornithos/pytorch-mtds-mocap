@@ -129,6 +129,9 @@ def train(args):
         loss += step_loss / args.test_every
         current_step += 1
 
+        if current_step % 20 == 0:
+            sys.stdout.flush()
+        
         # Decay learning rate (if appl.)
         if current_step % args.learning_rate_step == 0:
             args.learning_rate = args.learning_rate * args.learning_rate_decay_factor
