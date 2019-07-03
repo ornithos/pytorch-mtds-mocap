@@ -33,15 +33,16 @@ class MTGRU(nn.Module):
         """Create the model.
 
         Args:
-          source_seq_len: lenght of the input sequence.
-          target_seq_len: lenght of the target sequence.
+          target_seq_len: length of the target sequence.
           rnn_decoder_size: number of units in the rnn.
           rnn_encoder_size: number of units in the MT encoder rnn.
           batch_size: the size of the batches used during the forward pass.
           k: the size of the Multi-Task latent space.
+          n_psi_hidden: the size of the nonlinear hidden layer for generating parameters psi.
+          n_psi_lowrank: the size of the linear subspace in which psi lives (to reduce par count).
           output_dim: instantaneous dimension of output (size of vector emitted at each time t).
+          input_dim: size of each input vector at each time t.
           dropout: probability of dropout used for encoding.
-          input_dim: number of input dimensions excl skeleton joints (i.e. trajectory inputs).
           residual_output: passes the inputs directly to output via residual connection. If the output dim > input dim
             as is typically the case when taking the modelled root-feet joints as input, only the first input_dim
             outputs are affected.
@@ -247,3 +248,50 @@ class MTGRU(nn.Module):
                 outputs[i, (64 * k):(64 * (k+1)), :] = data_Y[i + k].T
 
         return inputs, outputs
+
+
+class OpenLoopGRU(nn.Module):
+    """Non MT version of the MT model for human motion prediction. Prediction is open loop."""
+
+    def __init__(self,
+                 target_seq_len,
+                 rnn_decoder_size,
+                 batch_size,
+                 output_dim=64,
+                 input_dim=0,
+                 dropout=0.0,
+                 residual_output=True):
+        """Create the model.
+
+        Args:
+          target_seq_len: lenght of the target sequence.
+          rnn_decoder_size: number of units in the rnn.
+          batch_size: the size of the batches used during the forward pass.
+          output_dim: instantaneous dimension of output (size of vector emitted at each time t).
+          dropout: probability of dropout used for encoding.
+          input_dim: number of input dimensions excl skeleton joints (i.e. trajectory inputs).
+          residual_output: passes the inputs directly to output via residual connection. If the output dim > input dim
+            as is typically the case when taking the modelled root-feet joints as input, only the first input_dim
+            outputs are affected.
+        """
+        super(OpenLoopGRU, self).__init__()
+
+        self.HUMAN_SIZE = output_dim
+        self.input_size = input_dim
+        self.target_seq_len = target_seq_len
+        self.decoder_size = rnn_decoder_size
+        self.batch_size = batch_size
+        self.dropout = dropout
+        self.residual_output = residual_output
+
+        print("Input size is %d" % self.input_size)
+        print('latent_size = {0}'.format(k))
+        print('decoder_state_size = {0}'.format(rnn_decoder_size))
+
+        self.model = nn.Sequential(
+            nn.GRU(self.input_size, self.decoder_size, batch_first=True),
+            nn.Linear(self.decoder_size, self.HUMAN_SIZE)
+        )
+
+    def forward(self, inputs, state=None):
+        return self.model(inputs, state)

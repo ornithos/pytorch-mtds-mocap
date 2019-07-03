@@ -40,18 +40,37 @@ def create_model(args):
     return model
 
 
-def train():
+def create_model_k0(args):
+    """Create MT model and initialize or load parameters in session."""
+
+    model = mt_model.OpenLoopGRU(
+        args.seq_length_out,
+        args.decoder_size,
+        args.batch_size,
+        args.human_size,
+        args.input_size,
+        args.dropout_p,
+        args.residual_velocities)
+
+    if len(args.load) <= 0:
+        return model
+
+    print("Loading model")
+    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+    return model
+
+
+def train(args):
     """Train a MT model on human motion"""
 
     train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size)
 
-    model = create_model()
+    model = create_model(args)
     if not args.use_cpu:
         model = model.cuda()
 
-    assert len(args.load) == 0, "Training from load file no longer supported in this fork."
-
     has_weight = not np.isclose(args.first3_prec, 1.0)
+    is_MT = args.k > 0
     current_step = 0
     previous_losses = []
 
@@ -78,7 +97,10 @@ def train():
         if not args.use_cpu:
             inputs, outputs =  inputs.cuda(), outputs.cuda()
 
-        preds, mu, logstd, state = model(inputs, outputs)
+        if is_MT:
+            preds, mu, logstd, state = model(inputs, outputs)
+        else:
+            preds = model(inputs)
 
         sqerr = (preds - outputs) ** 2
         if has_weight:
@@ -88,8 +110,9 @@ def train():
 
         # assume \sigma is const. wrt optimisation, and hence normalising constant can be ignored.
         # Now for KL term. Since we're descending *negative* L.B., we need to *ADD* KL to loss:
-        KLD = -0.5 * torch.sum(1 + 2*logstd - mu.pow(2) - torch.exp(2*logstd))
-        step_loss = step_loss + KLD
+        if not k0:
+            KLD = -0.5 * torch.sum(1 + 2*logstd - mu.pow(2) - torch.exp(2*logstd))
+            step_loss = step_loss + KLD
 
         # Actual backpropagation
         step_loss.backward()
@@ -125,7 +148,10 @@ def train():
             if not args.use_cpu:
                 inputs, outputs, inputs.cuda(), outputs.cuda()
 
-            preds, mu, logstd, state = model(inputs, outputs)
+            if is_MT:
+                preds, mu, logstd, state = model(inputs, outputs)
+            else:
+                preds = model(inputs)
 
             sqerr = (preds - outputs) ** 2
             if has_weight:
@@ -133,8 +159,10 @@ def train():
                     dim=2).to(sqerr.device)
 
             val_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
-            KLD = -0.5 * torch.sum(1 + 2 * logstd - mu.pow(2) - torch.exp(2 * logstd))
-            val_loss = val_loss + KLD
+
+            if is_MT:
+                KLD = -0.5 * torch.sum(1 + 2 * logstd - mu.pow(2) - torch.exp(2 * logstd))
+                val_loss = val_loss + KLD
 
             print()
             print("{0: <16} |".format("milliseconds"), end="")
