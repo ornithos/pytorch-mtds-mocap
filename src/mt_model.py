@@ -158,7 +158,7 @@ class MTGRU(nn.Module):
         # residual connection?
         if self.residual_output:
             if self.HUMAN_SIZE >= self.input_size:
-                yhats = yhats + torch.cat((inputs, torch.zeros(batchsize, inputs.size(1),
+                yhats = yhats + torch.cat((inputs, torch.zeros(inputs.size(0), inputs.size(1),
                                                                self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
             else:
                 yhats = yhats[:, :, :self.input_size] + inputs
@@ -307,7 +307,7 @@ class OpenLoopGRU(nn.Module):
 
         if self.residual_output:
             if self.HUMAN_SIZE >= self.input_size:
-                yhats = yhats + torch.cat((inputs, torch.zeros(self.batch_size, inputs.size(1),
+                yhats = yhats + torch.cat((inputs, torch.zeros(inputs.size(0), inputs.size(1),
                                                                self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
             else:
                 yhats = yhats[:, :, :self.input_size] + inputs
