@@ -191,31 +191,39 @@ class MTGRU(nn.Module):
         return hidden_seq    # hidden state is simply hidden_seq[-1,:] so no need to return explicitly
 
     def get_batch(self, data_Y, data_U):
+        return self._get_batch(data_Y, data_U, self.batch_size, self.target_seq_len, self.input_size, self.HUMAN_SIZE)
+
+    def get_test_batch(self, data_Y, data_U, batch_size):
+        return self._get_test_batch(data_Y, data_U, batch_size, self.target_seq_len, self.input_size, self.HUMAN_SIZE)
+
+    @staticmethod
+    def _get_batch(data_Y, data_U, batch_size, target_seq_len, input_size, human_size):
 
         # Select entries at random
         probs = np.array([y.shape[0] for y in data_Y])
         probs = probs / probs.sum()
-        chosen_keys = np.random.choice(len(data_Y), self.batch_size, p=probs)
+        chosen_keys = np.random.choice(len(data_Y), batch_size, p=probs)
 
-        inputs = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
-        outputs = np.zeros((self.batch_size, self.target_seq_len, self.HUMAN_SIZE), dtype=float)
+        inputs = np.zeros((batch_size, target_seq_len, input_size), dtype=float)
+        outputs = np.zeros((batch_size, target_seq_len, human_size), dtype=float)
 
-        for i in range(self.batch_size):
+        for i in range(batch_size):
             the_key = chosen_keys[i]
 
             # Get the number of frames
             n = data_Y[the_key].shape[0]
 
             # Sample somewhere in the middle
-            idx = np.random.randint(1, n - self.target_seq_len)
+            idx = np.random.randint(1, n - target_seq_len)
 
             # append to function outputs
-            inputs[i, :, :] = data_U[the_key][idx:idx + self.target_seq_len, :]
-            outputs[i, :, :] = data_Y[the_key][idx:idx + self.target_seq_len, :]
+            inputs[i, :, :] = data_U[the_key][idx:idx + target_seq_len, :]
+            outputs[i, :, :] = data_Y[the_key][idx:idx + target_seq_len, :]
 
         return inputs, outputs
 
-    def get_test_batch(self, data_Y, data_U, batch_size):
+    @staticmethod
+    def _get_test_batch(data_Y, data_U, batch_size, target_seq_len, input_size, human_size):
         """Get a random batch of data from the specified bucket, prepare for step.
 
         Args
@@ -236,10 +244,10 @@ class MTGRU(nn.Module):
                                            replace=batch_size > len(data_Y) - k_ahead)
 
         # How many frames in total do we need?
-        target_len = self.target_seq_len * k_ahead
+        target_len = target_seq_len * k_ahead
 
-        inputs = np.zeros((batch_size, target_len, self.input_size), dtype=float)
-        outputs = np.zeros((batch_size, target_len, self.HUMAN_SIZE), dtype=float)
+        inputs = np.zeros((batch_size, target_len, input_size), dtype=float)
+        outputs = np.zeros((batch_size, target_len, human_size), dtype=float)
 
         for i in chosen_keys:
             # Append the data    (batch, tt, dd)
@@ -285,13 +293,17 @@ class OpenLoopGRU(nn.Module):
         self.residual_output = residual_output
 
         print("Input size is %d" % self.input_size)
-        print('latent_size = {0}'.format(k))
         print('decoder_state_size = {0}'.format(rnn_decoder_size))
 
-        self.model = nn.Sequential(
-            nn.GRU(self.input_size, self.decoder_size, batch_first=True),
-            nn.Linear(self.decoder_size, self.HUMAN_SIZE)
-        )
+        self.rnn = nn.GRU(self.input_size, self.decoder_size, batch_first=True)
+        self.emission = nn.Linear(self.decoder_size, self.HUMAN_SIZE)
 
-    def forward(self, inputs, state=None):
-        return self.model(inputs, state)
+    def forward(self, inputs):
+        seq, state = self.rnn(inputs)
+        return self.emission(seq)
+
+    def get_batch(self, data_Y, data_U):
+        return MTGRU._get_batch(data_Y, data_U, self.batch_size, self.target_seq_len, self.input_size, self.HUMAN_SIZE)
+
+    def get_test_batch(self, data_Y, data_U, batch_size):
+        return MTGRU._get_test_batch(data_Y, data_U, batch_size, self.target_seq_len, self.input_size, self.HUMAN_SIZE)
