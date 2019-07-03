@@ -272,44 +272,38 @@ def train():
             sys.stdout.flush()
 
 
-def sample():
+def sample(args):
 
     train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size)
 
-    if True:
-        # === Create the model ===
-        print("Creating %d layers of %d units." % (args.num_layers, args.size))
-        model = create_model()
-        model.eval()
-        if not args.use_cpu:
-            model = model.cuda()
-        print("Model created")
+    model = create_model()
+    model.eval()
+    if not args.use_cpu:
+        model = model.cuda()
+    print("Model created")
 
-        # Make prediction with srnn' seeds
-        encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
-        encoder_inputs = torch.from_numpy(encoder_inputs).float()
-        decoder_inputs = torch.from_numpy(decoder_inputs).float()
-        decoder_outputs = torch.from_numpy(decoder_outputs).float()
-        if not args.use_cpu:
-            encoder_inputs = encoder_inputs.cuda()
-            decoder_inputs = decoder_inputs.cuda()
-            decoder_outputs = decoder_outputs.cuda()
-        encoder_inputs = Variable(encoder_inputs)
-        decoder_inputs = Variable(decoder_inputs)
-        decoder_outputs = Variable(decoder_outputs)
+    inputs, outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
 
-        preds = model(encoder_inputs, decoder_inputs, not args.use_cpu)
+    inputs = Variable(torch.from_numpy(inputs).float())
+    outputs = Variable(torch.from_numpy(outputs).float())
+    if not args.use_cpu:
+        inputs, outputs, inputs.cuda(), outputs.cuda()
 
-        loss = (preds - decoder_outputs) ** 2
-        loss.cpu().data.numpy()
-        loss = loss.mean()
+    if args.k > 0:
+        preds, mu, logstd, state = model(inputs, outputs)
+    else:
+        preds = model(inputs)
 
-        preds = preds.cpu().data.numpy()
-        preds = preds.transpose([1, 0, 2])
+    loss = (preds - outputs) ** 2
+    loss.cpu().data.numpy()
+    loss = loss.mean()
 
-        loss = loss.cpu().data.numpy()
+    preds = preds.cpu().data.numpy()
+    preds = preds.transpose([1, 0, 2])
 
-        np.savez("predictions_{0}.npz".format(args.style_ix), preds=preds, actual=decoder_outputs)
+    loss = loss.cpu().data.numpy()
+
+    np.savez("mt_predictions_{0}.npz".format(args.style_ix), preds=preds, actual=outputs)
 
     return
 
