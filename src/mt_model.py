@@ -203,7 +203,7 @@ class MTGRU(nn.Module):
             z_t = torch.sigmoid(gx[_ixz] + gh[_ixz] + self.gru_bias[_ixz])  # convex pass-through
             r_t = torch.sigmoid(gx[_ixr] + gh[_ixr] + self.gru_bias[_ixr])  # forget
 
-            eta_t = torch.tanh(x_t @ Wih + r_t * torch.tanh(h_t @ Whh + bh))    # hidden
+            eta_t = torch.tanh(x_t @ Wih + r_t * (h_t @ Whh) + bh)    # hidden
             h_t = z_t * h_t + (1 - z_t) * eta_t
 
             hidden_seq.append(h_t.unsqueeze(0))
