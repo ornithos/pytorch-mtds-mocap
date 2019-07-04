@@ -98,7 +98,10 @@ class MTGRU(nn.Module):
         bh = (self.decoder_size,)
         Wih = (self.input_size, self.decoder_size)
         C = (self.decoder_size, self.HUMAN_SIZE)
-        D = (self.input_size, (self.HUMAN_SIZE - self.input_size))
+        if self.residual_output:
+            D = (self.input_size, (self.HUMAN_SIZE - self.input_size))
+        else:
+            D = (self.input_size, self.HUMAN_SIZE)
         return Whh, bh, Wih, C, D
 
     def _decoder_par_size(self):
@@ -160,9 +163,11 @@ class MTGRU(nn.Module):
         for bb in range(batchsize):
             Whh, bh, Wih, C, D = self._decoder_par_reshape(psi[bb,:])
             dec = self.partial_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
-            yhat_bb = dec @ C + torch.cat(
-                                  (torch.zeros(inputs.size(1), self.input_size).to(inputs.device), inputs[bb, :, :] @ D),
-                                1)
+            if self.residual_output:
+                zero = torch.zeros(inputs.size(1), self.input_size).to(inputs.device)
+                yhat_bb = dec @ C + torch.cat((zero, inputs[bb, :, :] @ D),1)
+            else:
+                yhat_bb = dec @ C + inputs[bb, :, :] @ D
             states.append(dec[-1, :].unsqueeze(0).detach())
             yhats.append(yhat_bb.unsqueeze(0))
 
