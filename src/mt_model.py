@@ -199,9 +199,9 @@ class MTGRU(nn.Module):
 
             # batch the static matmuls
             gx, gh = x_t @ self.gru_Wih, h_t @ self.gru_Whh
-            _ixz, _ixr = slice(0, HS), slice(HS, 2 * HS)
-            z_t = torch.sigmoid(gx[_ixz] + gh[_ixz] + self.gru_bias[_ixz])  # convex pass-through
+            _ixr, _ixz = slice(0, HS), slice(HS, 2 * HS)
             r_t = torch.sigmoid(gx[_ixr] + gh[_ixr] + self.gru_bias[_ixr])  # forget
+            z_t = torch.sigmoid(gx[_ixz] + gh[_ixz] + self.gru_bias[_ixz])  # convex pass-through
 
             eta_t = torch.tanh(x_t @ Wih + r_t * (h_t @ Whh) + bh)    # hidden
             h_t = z_t * h_t + (1 - z_t) * eta_t
