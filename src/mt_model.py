@@ -132,7 +132,7 @@ class MTGRU(nn.Module):
         for tt in range(1, outputs.shape[0]):
             enc_state = self.encoder_cell(outputs[tt, :, :], enc_state)
 
-            mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
+        mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(logstd)
