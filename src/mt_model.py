@@ -310,7 +310,7 @@ class OpenLoopGRU(nn.Module):
                 yhats = yhats + torch.cat((inputs, torch.zeros(inputs.size(0), inputs.size(1),
                                                                self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
             else:
-                yhats = yhats[:, :, :self.input_size] + inputs
+                yhats = yhats + inputs[:, :, :self.HUMAN_SIZE]
         return yhats
 
     def get_batch(self, data_Y, data_U):
