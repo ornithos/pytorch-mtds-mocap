@@ -126,6 +126,19 @@ class MTGRU(nn.Module):
         batchsize = inputs.shape[0]
         state = torch.zeros(batchsize, self.decoder_size).to(inputs.device) if state is None else state
 
+        # encode outputs into latent z (pseudo-)posterior
+        mu, logstd = self.encode(outputs)
+
+        # Sample from (pseudo-)posterior
+        eps = torch.randn_like(logstd)
+        z = mu + eps * torch.exp(logstd)
+
+        # generate sequence from z
+        yhats, states = self.forward_given_z(inputs, z, state)
+
+        return yhats, mu, logstd, states
+
+    def encode(self, outputs):
         # Encode current sequence(s) => latent space
         outputs = torch.transpose(outputs, 0, 1)
         enc_state = self.encoder_cell(outputs[0, :, :])
@@ -133,10 +146,10 @@ class MTGRU(nn.Module):
             enc_state = self.encoder_cell(outputs[tt, :, :], enc_state)
 
         mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
+        return mu, logstd
 
-        # Sample from (pseudo-)posterior
-        eps = torch.randn_like(logstd)
-        z = mu + eps * torch.exp(logstd)
+    def forward_given_z(self, inputs, z, state=None):
+        batchsize = inputs.shape[0]
 
         # Decode from sampled z
         psi = self.psi_decoder(z)
@@ -148,7 +161,7 @@ class MTGRU(nn.Module):
             Whh, bh, Wih, C, D = self._decoder_par_reshape(psi[bb,:])
             dec = self.partial_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
             yhat_bb = dec @ C + torch.cat(
-                                  (torch.zeros(inputs.size(1), self.input_size).to(inputs.device), inputs[bb, :, :] @ D), 
+                                  (torch.zeros(inputs.size(1), self.input_size).to(inputs.device), inputs[bb, :, :] @ D),
                                 1)
             states.append(dec[-1, :].unsqueeze(0).detach())
             yhats.append(yhat_bb.unsqueeze(0))
@@ -163,7 +176,7 @@ class MTGRU(nn.Module):
             else:
                 yhats = yhats[:, :, :self.input_size] + inputs
 
-        return yhats, mu, logstd, states
+        return yhats, states
 
     def partial_GRU(self,
                     x: torch.Tensor,
