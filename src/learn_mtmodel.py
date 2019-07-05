@@ -85,6 +85,12 @@ def train(args):
     else:
         Exception("Unknown optimiser type: {:d}. Try 'SGD', 'Nesterov' or 'Adam'")
 
+    has_ar_noise = args.ar_coef > 0
+    if has_ar_noise:
+        assert args.ar_coef < 1, "ar_coef must be in [0, 1)."
+        # Construct banded AR precision matrix (fn def below)
+        Prec = ar_prec_matrix(args.ar_coef, args.seq_length_out).float()
+
     for _ in range(args.iterations):
         optimiser.zero_grad()
         model.train()
@@ -103,10 +109,15 @@ def train(args):
         else:
             preds = model(inputs)
 
-        sqerr = (preds - outputs) ** 2
+        err = (preds - outputs)
         if has_weight:
-            sqerr = sqerr * torch.cat((torch.ones(1,1,3) * args.first3_prec, torch.ones(1,1,args.human_size-3)),
-                                              dim=2).to(sqerr.device)
+            err = err * torch.cat((torch.ones(1,1,3) * torch.sqrt(args.first3_prec),
+                                       torch.ones(1, 1, args.human_size - 3)), dim=2).to(sqerr.device)
+        if not has_ar_noise:
+            sqerr = err ** 2
+        else:
+            sqerr = (Prec @ err) * err
+
         step_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
 
         # assume \sigma is const. wrt optimisation, and hence normalising constant can be ignored.
@@ -157,10 +168,15 @@ def train(args):
             else:
                 preds = model(inputs)
 
-            sqerr = (preds - outputs) ** 2
+            err = (preds - outputs)
             if has_weight:
-                sqerr = sqerr * torch.cat((torch.ones(1,1,3) * args.first3_prec, torch.ones(1,1,args.human_size-3)),
-                    dim=2).to(sqerr.device)
+                err = err * torch.cat((torch.ones(1,1,3) * torch.sqrt(args.first3_prec),
+                                       torch.ones(1, 1, args.human_size - 3)), dim=2).to(sqerr.device)
+
+            if not has_ar_noise:
+                sqerr = err ** 2
+            else:
+                sqerr = (Prec @ err) * err
 
             val_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
 
@@ -243,6 +259,14 @@ def sample(args):
 
     return
 
+def ar_prec_matrix(rho, n):
+    # Banded covariance construction
+    Prec = np.zeros((n, n))
+    i, j = np.indices(Prec.shape)
+    Prec[i == j] = 1 + rho ** 2
+    Prec[i == j - 1] = - rho
+    Prec[i == j + 2] = - rho
+    return torch.tensor(Prec)
 
 def read_all_data(data_dir, style_ix, njoints, input_fname, input_test_fname):
     """
@@ -352,6 +376,9 @@ if __name__ == "__main__":
     parser.add_argument('--dropout_p', dest='dropout_p',
                         help='Dropout probability for hidden layers',
                         default=0.0, type=float)
+    parser.add_argument('--ar_coef', dest='ar_coef',
+                        help='Autoregressive coefficient (default is off)',
+                        default=0.0, type=float)
 
     # Directories
     parser.add_argument('--data_dir', dest='data_dir',
@@ -388,6 +415,7 @@ if __name__ == "__main__":
                                               'iterations_{0}'.format(args.iterations),
                                               'decoder_size_{0}'.format(args.decoder_size),
                                               'zdim_{0}'.format(args.k),
+                                              'ar_coeff'
                                               'psi_lowrank_{0}'.format(args.size_psi_lowrank),
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
