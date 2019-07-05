@@ -176,7 +176,9 @@ def train(args):
             if not has_ar_noise:
                 sqerr = err ** 2
             else:
-                sqerr = (Prec @ err) * err
+                Prec_test = ar_prec_matrix(args.ar_coef, err.size(1)).float()
+                Prec_test = Prec_test if args.use_cpu else Prec_test.cuda()
+                sqerr = (Prec_test @ err) * err
 
             val_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
 
