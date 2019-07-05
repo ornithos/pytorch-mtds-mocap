@@ -67,7 +67,7 @@ def train(args):
                                                                      args.input_fname, args.input_test_fname)
 
     model = create_model(args)
-    args.use_cpu or model.cuda()
+    model = model if args.use_cpu else model.cuda()
 
     has_weight = not np.isclose(args.first3_prec, 1.0)
     is_MT = args.k > 0
@@ -89,7 +89,7 @@ def train(args):
         assert args.ar_coef < 1, "ar_coef must be in [0, 1)."
         # Construct banded AR precision matrix (fn def below)
         Prec = ar_prec_matrix(args.ar_coef, args.seq_length_out).float()
-        args.use_cpu or Prec.cuda()
+        Prec = Prec if args.use_cpu else Prec.cuda()
 
     for _ in range(args.iterations):
         optimiser.zero_grad()
@@ -415,7 +415,7 @@ if __name__ == "__main__":
                                               'iterations_{0}'.format(args.iterations),
                                               'decoder_size_{0}'.format(args.decoder_size),
                                               'zdim_{0}'.format(args.k),
-                                              'ar_coeff'
+                                              'ar_coef_{:3f}'.format(args.ar_coef*1e3),
                                               'psi_lowrank_{0}'.format(args.size_psi_lowrank),
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
