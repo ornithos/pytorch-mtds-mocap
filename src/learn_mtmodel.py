@@ -63,8 +63,7 @@ def create_model_k0(args):
 def train(args):
     """Train a MT model on human motion"""
 
-    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size,
-                                                                     args.input_fname, args.input_test_fname, args.output_fname)
+    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args)
 
     model = create_model(args)
     model = model if args.use_cpu else model.cuda()
@@ -270,7 +269,7 @@ def ar_prec_matrix(rho, n):
     Prec[i == j + 2] = - rho
     return torch.tensor(Prec)
 
-def read_all_data(data_dir, style_ix, njoints, input_fname, input_test_fname, output_fname):
+def read_all_data(args):
     """
     Loads data for training/testing and normalizes it.
 
@@ -288,20 +287,23 @@ def read_all_data(data_dir, style_ix, njoints, input_fname, input_test_fname, ou
     """
 
     # === Read training data ===
-    print("Reading training data (test index {0:d}).".format(style_ix))
+    print("Reading training data (test index {0:d}).".format(args.style_ix))
+    input_test_fname = args.input_test_fname
     if input_test_fname == "":
-        input_test_fname = "test_input_{0}_u.npz".format(style_ix)
+        input_test_fname = "test_input_{0}_u.npz".format(args.style_ix)
 
-    style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
-    train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, 9) if i != style_ix])
-    train_set_Y = np.load(os.path.join(data_dir, output_fname))
-    train_set_U = np.load(os.path.join(data_dir, input_fname))
+    njoints = args.human_size
+    
+    style_lkp = np.load(os.path.join(args.data_dir, "styles_lkp.npz"))
+    train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, 9) if i != args.style_ix])
+    train_set_Y = np.load(os.path.join(args.data_dir, args.output_fname))
+    train_set_U = np.load(os.path.join(args.data_dir, args.input_fname))
     njoints = train_set_Y[str(0)].shape[1] if njoints <= 0 else njoints
     train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
     train_set_U = [train_set_U[str(i)] for i in train_ixs]
 
-    test_set_Y = np.load(os.path.join(data_dir, "test_input_{0}_y.npz".format(style_ix)))
-    test_set_U = np.load(os.path.join(data_dir, input_test_fname))
+    test_set_Y = np.load(os.path.join(args.data_dir, "test_input_{0}_y.npz".format(args.style_ix)))
+    test_set_U = np.load(os.path.join(args.data_dir, input_test_fname))
     test_set_Y = [test_set_Y[str(i + 1)][:njoints, :] for i in range(len(test_set_Y.keys()))]  # whatever, apparently test is transpose of train
     test_set_U = [test_set_U[str(i + 1)] for i in range(len(test_set_U.keys()))]
 
@@ -403,6 +405,9 @@ if __name__ == "__main__":
                         default="edin_Us_30fps.npz")
     parser.add_argument('--output_fname', dest='output_fname', type=str, help="name of output file",
                         default="edin_Ys_30fps.npz")
+    parser.add_argument('--stylelkp_fname', dest='stylelkp_fname', type=str, help="name of style_lkp file",
+                        default="styles_lkp.npz")
+    parser.add_argument('--data_augmentation', dest='DA', action='store_true', default=False)
     parser.add_argument('--input_test_fname', dest='input_test_fname', type=str, help="name of test input file",
                         default="")
 
@@ -412,6 +417,15 @@ if __name__ == "__main__":
     if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
         print("Moving datadir from {:s} => ../../mocap-mtds/data/".format(args.data_dir))
         args.data_dir = os.path.normpath("../../mocap-mtds/data/")
+
+    if args.DA:
+        def append_DA(x):
+            base, ext = os.path.splitext(x)
+            return base + "_DA" + ext
+
+        args.input_fname = append_DA(args.input_fname)
+        args.output_fname = append_DA(args.output_fname)
+        args.stylelkp_fname = append_DA(args.stylelkp_fname)
 
     train_dir = os.path.normpath(os.path.join(args.train_dir,
                                               'style_{0}'.format(args.style_ix),
