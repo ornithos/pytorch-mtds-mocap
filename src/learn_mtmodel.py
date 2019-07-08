@@ -433,7 +433,7 @@ if __name__ == "__main__":
                                               'iterations_{0}'.format(args.iterations),
                                               'decoder_size_{0}'.format(args.decoder_size),
                                               'zdim_{0}'.format(args.k),
-                                              'ar_coef_{:3.0f}'.format(args.ar_coef*1e3),
+                                              'ar_coef_{:.0f}'.format(args.ar_coef*1e3),
                                               'psi_lowrank_{0}'.format(args.size_psi_lowrank),
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
