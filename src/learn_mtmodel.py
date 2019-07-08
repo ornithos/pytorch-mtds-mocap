@@ -64,7 +64,7 @@ def train(args):
     """Train a MT model on human motion"""
 
     train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size,
-                                                                     args.input_fname, args.input_test_fname)
+                                                                     args.input_fname, args.input_test_fname, args.output_fname)
 
     model = create_model(args)
     model = model if args.use_cpu else model.cuda()
@@ -270,7 +270,7 @@ def ar_prec_matrix(rho, n):
     Prec[i == j + 2] = - rho
     return torch.tensor(Prec)
 
-def read_all_data(data_dir, style_ix, njoints, input_fname, input_test_fname):
+def read_all_data(data_dir, style_ix, njoints, input_fname, input_test_fname, output_fname):
     """
     Loads data for training/testing and normalizes it.
 
@@ -294,7 +294,7 @@ def read_all_data(data_dir, style_ix, njoints, input_fname, input_test_fname):
 
     style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
     train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, 9) if i != style_ix])
-    train_set_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps.npz"))
+    train_set_Y = np.load(os.path.join(data_dir, output_fname))
     train_set_U = np.load(os.path.join(data_dir, input_fname))
     njoints = train_set_Y[str(0)].shape[1] if njoints <= 0 else njoints
     train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
@@ -401,6 +401,8 @@ if __name__ == "__main__":
                         default=False)
     parser.add_argument('--input_fname', dest='input_fname', type=str, help="name of input file",
                         default="edin_Us_30fps.npz")
+    parser.add_argument('--output_fname', dest='output_fname', type=str, help="name of output file",
+                        default="edin_Ys_30fps.npz")
     parser.add_argument('--input_test_fname', dest='input_test_fname', type=str, help="name of test input file",
                         default="")
 
@@ -417,11 +419,12 @@ if __name__ == "__main__":
                                               'iterations_{0}'.format(args.iterations),
                                               'decoder_size_{0}'.format(args.decoder_size),
                                               'zdim_{0}'.format(args.k),
-                                              'ar_coef_{:3f}'.format(args.ar_coef*1e3),
+                                              'ar_coef_{:3.0f}'.format(args.ar_coef*1e3),
                                               'psi_lowrank_{0}'.format(args.size_psi_lowrank),
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
                                               '{0}'.format(args.input_fname.split(".")[0]),
+                                              '{0}'.format(args.output_fname.split(".")[0]),
                                               'residual_vel' if args.residual_velocities else 'not_residual_vel'))
 
     print(train_dir)
