@@ -214,7 +214,7 @@ def train(args):
                                                     args.learning_rate, step_time * 1000, loss,
                                                     val_loss))
 
-            torch.save(model, train_dir + '/model_' + str(current_step))
+            torch.save(model, args.train_dir + '/model_' + str(current_step))
 
             print()
             previous_losses.append(loss)
