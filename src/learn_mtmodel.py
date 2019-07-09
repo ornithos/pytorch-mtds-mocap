@@ -423,7 +423,7 @@ def main(args=None):
         args.output_fname = append_DA(args.output_fname)
         args.stylelkp_fname = append_DA(args.stylelkp_fname)
 
-    train_dir = os.path.normpath(os.path.join(args.train_dir,
+    args.train_dir = os.path.normpath(os.path.join(args.train_dir,
                                               'style_{0}'.format(args.style_ix),
                                               'out_{0}'.format(args.seq_length_out),
                                               'iterations_{0}'.format(args.iterations),
@@ -437,15 +437,15 @@ def main(args=None):
                                               '{0}'.format(args.output_fname.split(".")[0]),
                                               'residual_vel' if args.residual_velocities else 'not_residual_vel'))
 
-    print(train_dir)
-    os.makedirs(train_dir, exist_ok=True)
+    print(args.train_dir)
+    os.makedirs(args.train_dir, exist_ok=True)
 
     if args.sample:
         sample(args)
     else:
         train(args)
 
-    return train_dir
+    return args
 
 
 if __name__ == "__main__":
