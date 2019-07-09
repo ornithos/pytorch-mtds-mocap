@@ -445,6 +445,8 @@ def main(args=None):
     else:
         train(args)
 
+    return train_dir
+
 
 if __name__ == "__main__":
     main()
