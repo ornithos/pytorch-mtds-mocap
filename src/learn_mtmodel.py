@@ -312,15 +312,7 @@ def read_all_data(args):
     return train_set_Y, train_set_U, test_set_Y, test_set_U
 
 
-def main(args):
-    if args.sample:
-        sample(args)
-    else:
-        train(args)
-
-
-if __name__ == "__main__":
-
+def main(args=None):
     # Learning
     parser = argparse.ArgumentParser(description='Train MT-RNN for human pose estimation')
     parser.add_argument('--style_ix', dest='style_ix',
@@ -411,7 +403,11 @@ if __name__ == "__main__":
     parser.add_argument('--input_test_fname', dest='input_test_fname', type=str, help="name of test input file",
                         default="")
 
-    args = parser.parse_args()
+    if args is None:
+        args = parser.parse_args()
+    else:
+        args = parser.parse_args(args)
+
     assert args.dropout_p == 0.0, "dropout not implemented yet."
 
     if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
@@ -433,7 +429,7 @@ if __name__ == "__main__":
                                               'iterations_{0}'.format(args.iterations),
                                               'decoder_size_{0}'.format(args.decoder_size),
                                               'zdim_{0}'.format(args.k),
-                                              'ar_coef_{:.0f}'.format(args.ar_coef*1e3),
+                                              'ar_coef_{:.0f}'.format(args.ar_coef * 1e3),
                                               'psi_lowrank_{0}'.format(args.size_psi_lowrank),
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
@@ -443,4 +439,12 @@ if __name__ == "__main__":
 
     print(train_dir)
     os.makedirs(train_dir, exist_ok=True)
-    main(args)
+
+    if args.sample:
+        sample(args)
+    else:
+        train(args)
+
+
+if __name__ == "__main__":
+    main()
