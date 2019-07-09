@@ -110,8 +110,8 @@ def train(args):
 
         err = (preds - outputs)
         if has_weight:
-            err = err * torch.cat((torch.ones(1,1,3) * torch.sqrt(args.first3_prec),
-                                       torch.ones(1, 1, args.human_size - 3)), dim=2).to(sqerr.device)
+            err = err * torch.cat((torch.ones(1,1,3) * np.sqrt(args.first3_prec),
+                                       torch.ones(1, 1, args.human_size - 3)), dim=2).to(err.device)
         if not has_ar_noise:
             sqerr = err ** 2
         else:
@@ -169,8 +169,8 @@ def train(args):
 
             err = (preds - outputs)
             if has_weight:
-                err = err * torch.cat((torch.ones(1,1,3) * torch.sqrt(args.first3_prec),
-                                       torch.ones(1, 1, args.human_size - 3)), dim=2).to(sqerr.device)
+                err = err * torch.cat((torch.ones(1,1,3) * np.sqrt(args.first3_prec),
+                                       torch.ones(1, 1, args.human_size - 3)), dim=2).to(err.device)
 
             if not has_ar_noise:
                 sqerr = err ** 2
