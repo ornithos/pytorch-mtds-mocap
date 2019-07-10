@@ -322,7 +322,7 @@ def read_all_data(args):
     njoints = args.human_size
 
     style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
-    train_ixs = np.concatenate([style_lkp[str(i+1)] for i in range(len(style_lkp.keys())) if i != args.style_ix])
+    train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, len(style_lkp.keys())+1) if i != args.style_ix]) # CAREFUL: jl is 1-based!
     train_set_Y = np.load(os.path.join(args.data_dir, args.output_fname))
     train_set_U = np.load(os.path.join(args.data_dir, args.input_fname))
     njoints = train_set_Y[str(0)].shape[1] if njoints <= 0 else njoints
