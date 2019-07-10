@@ -19,6 +19,9 @@ def create_model(args):
     if args.k == 0:
         return create_model_k0(args)
 
+    if args.dynamicsdict:
+        return create_model_DD(args)
+
     model = mt_model.MTGRU(
         args.seq_length_out,
         args.decoder_size,
@@ -47,6 +50,30 @@ def create_model_k0(args):
         args.seq_length_out,
         args.decoder_size,
         args.batch_size,
+        args.human_size,
+        args.input_size,
+        args.dropout_p,
+        args.residual_velocities)
+
+    if len(args.load) <= 0:
+        return model
+
+    print("Loading model")
+    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+    return model
+
+
+def create_model_DD(args):
+    """Create MT model and initialize or load parameters in session."""
+
+    model = mt_model.DynamicsDict(
+        args.seq_length_out,
+        args.decoder_size,
+        args.encoder_size,
+        args.batch_size,
+        args.k,
+        args.size_psi_hidden,
+        args.size_psi_lowrank,
         args.human_size,
         args.input_size,
         args.dropout_p,
@@ -375,6 +402,9 @@ def main(args=None):
     parser.add_argument('--ar_coef', dest='ar_coef',
                         help='Autoregressive coefficient (default is off)',
                         default=0.0, type=float)
+    parser.add_argument('--arch_DD', dest='dynamicsdict', action="store_true",
+                        help='Dynamics Dictionary Architecture',
+                        default=False)
 
     # Directories
     parser.add_argument('--data_dir', dest='data_dir',
@@ -433,6 +463,7 @@ def main(args=None):
                                               'psi_lowrank_{0}'.format(args.size_psi_lowrank),
                                               'optim_{0}'.format(args.optimiser),
                                               'lr_{0}'.format(args.learning_rate),
+                                              '{0}'.format("archDD" if args.dynamicsdict else "std"),
                                               '{0}'.format(args.input_fname.split(".")[0]),
                                               '{0}'.format(args.output_fname.split(".")[0]),
                                               'residual_vel' if args.residual_velocities else 'not_residual_vel'))
