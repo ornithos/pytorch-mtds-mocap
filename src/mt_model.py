@@ -99,7 +99,7 @@ class MTGRU(nn.Module):
         Wih = (self.input_size, self.decoder_size)
         C = (self.decoder_size, self.HUMAN_SIZE)
         if self.residual_output:
-            D = (self.input_size, (self.HUMAN_SIZE - self.input_size))
+            D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
         else:
             D = (self.input_size, self.HUMAN_SIZE)
         return Whh, bh, Wih, C, D
@@ -371,7 +371,7 @@ class DynamicsDict(nn.Module):
             as is typically the case when taking the modelled root-feet joints as input, only the first input_dim
             outputs are affected.
         """
-        super(MTGRU, self).__init__()
+        super(DynamicsDict, self).__init__()
 
         self.HUMAN_SIZE = output_dim
         self.input_size = input_dim
@@ -389,12 +389,12 @@ class DynamicsDict(nn.Module):
         print('encoder_state_size = {0}'.format(rnn_encoder_size))
 
         # Encoder weights
-        self.encoder_cell = nn.GRUCell(self.HUMAN_SIZE, rnn_encoder_size)
+        self.encoder = nn.GRU(self.HUMAN_SIZE, rnn_encoder_size, batch_first=True)
 
         self.to_mu = Parameter(torch.Tensor(rnn_encoder_size, k))
         self.to_lsigma = Parameter(torch.Tensor(rnn_encoder_size, k))
         self.to_lsigma_bias = Parameter(torch.Tensor(k))
-        self.init_weights((self.to_mu, self.to_lsigma))
+        MTGRU.init_weights((self.to_mu, self.to_lsigma))
         self.to_lsigma_bias.data = - torch.ones_like(self.to_lsigma_bias.data) * 0.5  # reduce initial std.
 
         # Psi Decoder weights
@@ -407,13 +407,13 @@ class DynamicsDict(nn.Module):
         )
 
         # GRU Decoder static weights (all except direct recurrent)
-        self.decoder_cell = nn.GRUCell(self.HUMAN_SIZE, rnn_decoder_size)
+        self.decoder = nn.GRU(self.input_size, rnn_decoder_size, batch_first=True)
 
 
     def _decoder_par_shape(self):
         C = (self.decoder_size, self.HUMAN_SIZE)
         if self.residual_output:
-            D = (self.input_size, (self.HUMAN_SIZE - self.input_size))
+            D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
         else:
             D = (self.input_size, self.HUMAN_SIZE)
         return C, D
@@ -432,8 +432,8 @@ class DynamicsDict(nn.Module):
         return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
 
     def forward(self, inputs, outputs, state=None):
-        batchsize = inputs.shape[0]
-        state = torch.zeros(batchsize, self.decoder_size).to(inputs.device) if state is None else state
+        # state = torch.zeros(batchsize, self.decoder_size).to(inputs.device) if state is None else state
+        state = None
 
         # encode outputs into latent z (pseudo-)posterior
         mu, logstd = self.encode(outputs)
@@ -449,11 +449,10 @@ class DynamicsDict(nn.Module):
 
     def encode(self, outputs):
         # Encode current sequence(s) => latent space
-        outputs = torch.transpose(outputs, 0, 1)
-        enc_state = self.encoder_cell(outputs[0, :, :])
-        for tt in range(1, outputs.shape[0]):
-            enc_state = self.encoder_cell(outputs[tt, :, :], enc_state)
+        # outputs = torch.transpose(outputs, 0, 1)
+        seq, enc_state = self.encoder(outputs)
 
+        enc_state = enc_state[0, :, :]  # remove unnecessary first dim (=1)
         mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
         return mu, logstd
 
@@ -471,21 +470,12 @@ class DynamicsDict(nn.Module):
         for bb in range(batchsize):
             C, D = self._decoder_par_reshape(psi[bb, :])
             if self.residual_output:
-                zero = torch.zeros(inputs.size(1), self.input_size).to(inputs.device)
-                yhat_bb = dec[bb,:,:] @ C + torch.cat((zero, inputs[bb, :, :] @ D), 1)
+                yhat_bb = dec[bb,:,:] @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1)
             else:
                 yhat_bb = dec[bb,:,:] @ C + inputs[bb, :, :] @ D
             yhats.append(yhat_bb.unsqueeze(0))
 
         yhats = torch.cat(yhats, dim=0)
-        # residual connection?
-        if self.residual_output:
-            if self.HUMAN_SIZE >= self.input_size:
-                yhats = yhats + torch.cat((inputs, torch.zeros(inputs.size(0), inputs.size(1),
-                                                               self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
-            else:
-                yhats = yhats[:, :, :self.input_size] + inputs
-
         return yhats, None
 
     def get_batch(self, data_Y, data_U):
