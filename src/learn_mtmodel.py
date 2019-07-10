@@ -102,11 +102,13 @@ def train(args):
 
     step_time, loss = 0, 0
     if args.optimiser.upper() == "SGD":
-        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate)
+        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     elif args.optimiser.upper() == "NESTEROV":
-        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.8, nesterov=True)
+        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.8, nesterov=True,
+                              weight_decay=args.weight_decay)
     elif args.optimiser.upper() == "ADAM":
-        optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas = (0.9, 0.999))
+        optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas=(0.9, 0.999),
+                               weight_decay=args.weight_decay)
     else:
         Exception("Unknown optimiser type: {:d}. Try 'SGD', 'Nesterov' or 'Adam'")
 
@@ -398,6 +400,9 @@ def main(args=None):
                         default=64, type=int)
     parser.add_argument('--dropout_p', dest='dropout_p',
                         help='Dropout probability for hidden layers',
+                        default=0.0, type=float)
+    parser.add_argument('--weight_decay', dest='weight_decay',
+                        help='Weight decay amount for regularisation',
                         default=0.0, type=float)
     parser.add_argument('--ar_coef', dest='ar_coef',
                         help='Autoregressive coefficient (default is off)',
