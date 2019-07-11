@@ -104,6 +104,25 @@ def parse_args(args=None):
     return _dictNamespace(configdict)
 
 
+def initial_arg_transform(args):
+    if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
+        print("Moving datadir from {:s} => ../../mocap-mtds/data/".format(args.data_dir))
+        args.data_dir = os.path.normpath("../../mocap-mtds/data/")
+
+    if args.data_augmentation:
+        def append_DA(x):
+            base, ext = os.path.splitext(x)
+            return base + "_DA" + ext
+
+        args.input_fname = append_DA(args.input_fname)
+        args.output_fname = append_DA(args.output_fname)
+        args.stylelkp_fname = append_DA(args.stylelkp_fname)
+
+    args.train_dir = get_model_save_dir(args)
+
+    return args
+
+
 def _get_types_from_argparse(parser):
     out = {}
     for a in parser._actions:
@@ -111,6 +130,7 @@ def _get_types_from_argparse(parser):
         if ctype is not None:
             out[a.dest] = ctype
     return out
+
 
 def _get_type_from_action(action):
     if isinstance(action, argparse._StoreAction):
@@ -122,9 +142,28 @@ def _get_type_from_action(action):
     else:
         raise Exception("Unexpected ArgParse action {:s}".format(type(action)))
 
+
+def get_model_save_dir(args):
+    return os.path.normpath(os.path.join(args.train_dir,
+                                         'style_{0}'.format(args.style_ix),
+                                         'out_{0}'.format(args.seq_length_out),
+                                         'iterations_{0}'.format(args.iterations),
+                                         'decoder_size_{0}'.format(args.decoder_size),
+                                         'zdim_{0}'.format(args.k),
+                                         'ar_coef_{:.0f}'.format(args.ar_coef * 1e3),
+                                         'psi_lowrank_{0}'.format(args.size_psi_lowrank),
+                                         'optim_{0}'.format(args.optimiser),
+                                         'lr_{0}'.format(args.learning_rate),
+                                         '{0}'.format("archDD" if args.dynamicsdict else "std"),
+                                         '{0}'.format(args.input_fname.split(".")[0]),
+                                         '{0}'.format(args.output_fname.split(".")[0]),
+                                         'residual_vel' if args.residual_velocities else 'not_residual_vel'))
+
+
 class _dictNamespace(object):
     """
     converts a dictionary into a namespace
     """
+
     def __init__(self, adict):
         self.__dict__.update(adict)

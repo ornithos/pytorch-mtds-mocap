@@ -250,9 +250,9 @@ def train(args):
 
 def sample(args):
 
-    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args.data_dir, args.style_ix, args.human_size)
+    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args)
 
-    model = create_model()
+    model = create_model(args)
     model.eval()
     if not args.use_cpu:
         model = model.cuda()
@@ -342,36 +342,9 @@ def torchify(*args, device="cpu"):
 def main(args=None):
 
     args = parseopts.parse_args(args)
+    args = parseopts.initial_arg_transform(args)
 
     assert args.dropout_p == 0.0, "dropout not implemented yet."
-
-    if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
-        print("Moving datadir from {:s} => ../../mocap-mtds/data/".format(args.data_dir))
-        args.data_dir = os.path.normpath("../../mocap-mtds/data/")
-
-    if args.data_augmentation:
-        def append_DA(x):
-            base, ext = os.path.splitext(x)
-            return base + "_DA" + ext
-
-        args.input_fname = append_DA(args.input_fname)
-        args.output_fname = append_DA(args.output_fname)
-        args.stylelkp_fname = append_DA(args.stylelkp_fname)
-
-    args.train_dir = os.path.normpath(os.path.join(args.train_dir,
-                                              'style_{0}'.format(args.style_ix),
-                                              'out_{0}'.format(args.seq_length_out),
-                                              'iterations_{0}'.format(args.iterations),
-                                              'decoder_size_{0}'.format(args.decoder_size),
-                                              'zdim_{0}'.format(args.k),
-                                              'ar_coef_{:.0f}'.format(args.ar_coef * 1e3),
-                                              'psi_lowrank_{0}'.format(args.size_psi_lowrank),
-                                              'optim_{0}'.format(args.optimiser),
-                                              'lr_{0}'.format(args.learning_rate),
-                                              '{0}'.format("archDD" if args.dynamicsdict else "std"),
-                                              '{0}'.format(args.input_fname.split(".")[0]),
-                                              '{0}'.format(args.output_fname.split(".")[0]),
-                                              'residual_vel' if args.residual_velocities else 'not_residual_vel'))
 
     print(args.train_dir)
     os.makedirs(args.train_dir, exist_ok=True)
