@@ -10,8 +10,8 @@ import mt_model
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-import argparse
 
+import parseopts
 
 def create_model(args):
     """Create MT model and initialize or load parameters in session."""
@@ -113,6 +113,7 @@ def train(args):
         Exception("Unknown optimiser type: {:d}. Try 'SGD', 'Nesterov' or 'Adam'")
 
     has_ar_noise = args.ar_coef > 0
+    device = "cpu" if args.use_cpu else "cuda"
     if has_ar_noise:
         assert args.ar_coef < 1, "ar_coef must be in [0, 1)."
         # Construct banded AR precision matrix (fn def below)
@@ -127,10 +128,7 @@ def train(args):
 
         # ------------------------------------------------------- TRAINING
         inputs, outputs = model.get_batch(train_set_Y, train_set_U)
-        inputs = Variable(torch.from_numpy(inputs).float())
-        outputs = Variable(torch.from_numpy(outputs).float())
-        if not args.use_cpu:
-            inputs, outputs =  inputs.cuda(), outputs.cuda()
+        inputs, outputs = torchify(inputs, outputs, device=device)
 
         if is_MT:
             preds, mu, logstd, state = model(inputs, outputs)
@@ -185,11 +183,7 @@ def train(args):
 
             # === Validation with random data from test set ===
             inputs, outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
-
-            inputs = Variable(torch.from_numpy(inputs).float())
-            outputs = Variable(torch.from_numpy(outputs).float())
-            if not args.use_cpu:
-                inputs, outputs = inputs.cuda(), outputs.cuda()
+            inputs, outputs = torchify(inputs, outputs, device=device)
 
             if is_MT:
                 preds, mu, logstd, state = model(inputs, outputs)
@@ -341,107 +335,13 @@ def read_all_data(args):
     return train_set_Y, train_set_U, test_set_Y, test_set_U
 
 
+def torchify(*args, device="cpu"):
+    return [Variable(torch.from_numpy(arg).float()).to(device) for arg in args]
+
+
 def main(args=None):
-    # Learning
-    parser = argparse.ArgumentParser(description='Train MT-RNN for human pose estimation')
-    parser.add_argument('--style_ix', dest='style_ix',
-                        help='Style index to hold out', type=int, required=True)
-    parser.add_argument('--learning_rate', dest='learning_rate',
-                        help='Learning rate',
-                        default=0.005, type=float)
-    parser.add_argument('--learning_rate_decay_factor', dest='learning_rate_decay_factor',
-                        help='Learning rate is multiplied by this much. 1 means no decay.',
-                        default=0.95, type=float)
-    parser.add_argument('--learning_rate_step', dest='learning_rate_step',
-                        help='Every this many steps, do decay.',
-                        default=10000, type=int)
-    parser.add_argument('--batch_size', dest='batch_size',
-                        help='Batch size to use during training.',
-                        default=16, type=int)
-    parser.add_argument('--iterations', dest='iterations',
-                        help='Iterations to train for.',
-                        default=1e5, type=int)
-    parser.add_argument('--test_every', dest='test_every',
-                        help='',
-                        default=200, type=int)
-    parser.add_argument('--optimiser', dest='optimiser',
-                        help='Optimiser: SGD, Nesterov, or ADAM',
-                        default="SGD", type=str)
-    parser.add_argument('--first3_prec', dest='first3_prec',
-                        help='Precision of noise model of first 3 outputs.',
-                        default=1.0, type=float)
 
-    # Architecture
-    parser.add_argument('--no_residual_velocities', dest='residual_velocities',
-                        help='Add a residual connection that effectively models velocities', action='store_false',
-                        default=True)
-    parser.add_argument('--latent_k', dest='k',
-                        help='Dimension of parameter manifold.', type=int, required=True)
-    parser.add_argument('--decoder_size', dest='decoder_size',
-                        help='Size of decoder recurrent state.',
-                        default=1024, type=int)
-    parser.add_argument('--encoder_size', dest='encoder_size',
-                        help='Size of encoder recurrent state.',
-                        default=512, type=int)
-    parser.add_argument('--size_psi_hidden', dest='size_psi_hidden',
-                        help='Size of NL hidden layer of psi network.',
-                        default=200, type=int)
-    parser.add_argument('--size_psi_lowrank', dest='size_psi_lowrank',
-                        help='Subspace dimension to embed parameter manifold into. This is to reduce par count.',
-                        default=30, type=int)
-    parser.add_argument('--seq_length_out', dest='seq_length_out',
-                        help='Number of frames that the decoder has to predict. 25fps',
-                        default=64, type=int)
-    parser.add_argument('--input_size', dest='input_size',
-                        help='Input dimension at each timestep',
-                        required=True, type=int)
-    parser.add_argument('--human_size', dest='human_size',
-                        help='Output dimension at each timestep',
-                        default=64, type=int)
-    parser.add_argument('--dropout_p', dest='dropout_p',
-                        help='Dropout probability for hidden layers',
-                        default=0.0, type=float)
-    parser.add_argument('--weight_decay', dest='weight_decay',
-                        help='Weight decay amount for regularisation',
-                        default=0.0, type=float)
-    parser.add_argument('--ar_coef', dest='ar_coef',
-                        help='Autoregressive coefficient (default is off)',
-                        default=0.0, type=float)
-    parser.add_argument('--arch_DD', dest='dynamicsdict', action="store_true",
-                        help='Dynamics Dictionary Architecture',
-                        default=False)
-
-    # Directories
-    parser.add_argument('--data_dir', dest='data_dir',
-                        help='Data directory',
-                        default=os.path.normpath("../../mocap-mtds/"), type=str)
-    # default=os.path.normpath("../../mocap-mtds/data/"), type=str)
-    parser.add_argument('--train_dir', dest='train_dir',
-                        help='Training directory',
-                        default=os.path.normpath("./experiments/"), type=str)
-    parser.add_argument('--use_cpu', dest='use_cpu',
-                        help='', action='store_true',
-                        default=False)
-    parser.add_argument('--load', dest='load',
-                        help='Try to load a previous checkpoint.',
-                        default='', type=str)
-    parser.add_argument('--sample', dest='sample',
-                        help='Set to True for sampling.', action='store_true',
-                        default=False)
-    parser.add_argument('--input_fname', dest='input_fname', type=str, help="name of input file",
-                        default="edin_Us_30fps.npz")
-    parser.add_argument('--output_fname', dest='output_fname', type=str, help="name of output file",
-                        default="edin_Ys_30fps.npz")
-    parser.add_argument('--stylelkp_fname', dest='stylelkp_fname', type=str, help="name of style_lkp file",
-                        default="styles_lkp.npz")
-    parser.add_argument('--data_augmentation', dest='DA', action='store_true', default=False)
-    parser.add_argument('--input_test_fname', dest='input_test_fname', type=str, help="name of test input file",
-                        default="")
-
-    if args is None:
-        args = parser.parse_args()
-    else:
-        args = parser.parse_args(args)
+    args = parseopts.parse_args(args)
 
     assert args.dropout_p == 0.0, "dropout not implemented yet."
 
@@ -449,7 +349,7 @@ def main(args=None):
         print("Moving datadir from {:s} => ../../mocap-mtds/data/".format(args.data_dir))
         args.data_dir = os.path.normpath("../../mocap-mtds/data/")
 
-    if args.DA:
+    if args.data_augmentation:
         def append_DA(x):
             base, ext = os.path.splitext(x)
             return base + "_DA" + ext
