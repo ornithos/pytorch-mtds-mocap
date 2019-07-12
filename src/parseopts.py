@@ -80,7 +80,14 @@ def parse_args(args=None):
     # ========= Now get defaults from config file =============
     config = configparser.ConfigParser(allow_no_value=True)
     # config.optionxform = lambda option: option    # permit uppercase: i.e. no conversion in parsing
-    config.read('default.ini')
+
+    config_dir, _fn = os.path.split(__file__)
+    config_fname = os.path.join(config_dir, 'default.ini')
+    try:
+        with open(config_fname) as f:
+            config.read_file(f)
+    except IOError:
+        raise FileNotFoundError("File {:s} does not exist in current working directory".format(config_fname))
 
     # flatten config dicts
     configdict = {}
