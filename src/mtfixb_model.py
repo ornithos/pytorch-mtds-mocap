@@ -292,7 +292,6 @@ class DynamicsDict(nn.Module):
         print("Input size is %d" % self.input_size)
         print('latent_size = {0}'.format(k))
         print('decoder_state_size = {0}'.format(rnn_decoder_size))
-        print('encoder_state_size = {0}'.format(rnn_encoder_size))
 
         # Encoder weights
         self.Z_mu = Parameter(torch.randn(total_num_batches, k) * 0.01).float()
@@ -399,7 +398,7 @@ class DataIterator:
         self.y_dim = self.dataY[0].shape[1]
         self.u_dim = self.dataU[0].shape[1]
         self.length = self._length()
-        self.batch_ids = list(range(self.length()))
+        self.batch_ids = list(range(self.length))
 
     def __iter__(self):
         return self
@@ -456,9 +455,9 @@ def _get_batch(data_iterator, batch_size):
     outputs = np.zeros((batch_size, data_iterator.chunk_size, data_iterator.y_dim), dtype=float)
     ixs = []
     for i in range(batch_size):
-        input, output, ix, is_new_state = next(data_iterator)
-        inputs[i, :, :] = input
-        outputs[i, :, :] = output
+        y, u, ix, is_new_state = next(data_iterator)
+        inputs[i, :, :] = u
+        outputs[i, :, :] = y
         ixs.append(ix)
 
     return inputs, outputs, ixs
