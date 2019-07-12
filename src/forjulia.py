@@ -3,6 +3,8 @@
 
 import mt_model
 import learn_mtmodel
+import mtfixb_model
+import learn_mtfixbmodel
 
 class dictNamespace(object):
     """
