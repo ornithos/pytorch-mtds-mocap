@@ -419,6 +419,7 @@ class DataIterator:
             eix = min(i + self.chunk_size, chunk_Y.shape[0])
             out = (chunk_Y[i:eix, :], chunk_U[i:eix, :], self.batch_ids[self.batch_ix], is_new_state)
             self.i = eix
+            self.batch_ix += 1
             return out
         else:
             raise StopIteration()

@@ -5,6 +5,7 @@ import mt_model
 import learn_mtmodel
 import mtfixb_model
 import learn_mtfixbmodel
+import parseopts
 
 class dictNamespace(object):
     """
