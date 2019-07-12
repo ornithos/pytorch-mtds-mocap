@@ -26,8 +26,8 @@ def create_model(args, total_num_batches):
     model = mtfixb_model.MTGRU(
         args.seq_length_out,
         args.decoder_size,
-        total_num_batches,
         args.batch_size,
+        total_num_batches,
         args.k,
         args.size_psi_hidden,
         args.size_psi_lowrank,
