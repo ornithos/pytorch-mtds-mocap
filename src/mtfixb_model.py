@@ -89,7 +89,7 @@ class MTGRU(nn.Module):
         Whh = (half_dec_size, half_dec_size * 3)
         bh = (half_dec_size * 3,)
         Wih = (self.input_size, half_dec_size * 3)
-        C = (self.decoder_size, self.HUMAN_SIZE)
+        C = (self.decoder_size // 2, self.HUMAN_SIZE)
         if self.residual_output:
             D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
         else:
@@ -119,16 +119,16 @@ class MTGRU(nn.Module):
 
     def forward(self, inputs, mu, sd, state=None):
         batchsize = inputs.shape[0]
-        state = torch.zeros(batchsize, self.decoder_size).to(inputs.device) if state is None else state
+        state = torch.zeros(batchsize, self.decoder_size // 2).to(inputs.device) if state is None else state
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(sd)
         z = mu + eps * sd
 
         # generate sequence from z
-        yhats, states = self.forward_given_z(inputs, z, state)
+        yhats = self.forward_given_z(inputs, z, state)
 
-        return yhats, states
+        return yhats
 
     def forward_given_z(self, inputs, z, state=None):
         batchsize = inputs.shape[0]
@@ -150,13 +150,12 @@ class MTGRU(nn.Module):
             yhats.append(yhat_bb.unsqueeze(0))
 
         seq2, state2 = self.rnn2(inputs)
-        yhats2 = seq2 @ C + inputs @ D
+        yhats2 = seq2 @ C
 
         yhats1 = torch.cat(yhats, dim=0)
-        yhats = torch.cat((yhats2, yhats1), dim=0)
         # states = torch.cat(states, dim=0)
 
-        return yhats  #, states
+        return yhats1 + yhats2  #, states
 
     def mutable_GRU(self,
                     x: torch.Tensor,
@@ -166,18 +165,19 @@ class MTGRU(nn.Module):
                     init_states: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         seq_sz, d = x.size()
         hidden_seq = []
-        h_t = torch.zeros(self.hidden_size).to(x.device) if init_states is None else init_states
+        h_t = torch.zeros(self.decoder_size // 2).to(x.device) if init_states is None else init_states
 
-        HS = self.decoder_size
+        HS = self.decoder_size // 2
+        _ixr, _ixz, _ixn = slice(0, HS), slice(HS, 2 * HS), slice(2 * HS, 3 * HS)
+
         for t in range(seq_sz):
             x_t = x[t, :]
 
             # batch the static matmuls
             gx, gh = x_t @ Wih, h_t @ Whh
-            _ixr, _ixz, _ixn = slice(0, HS), slice(HS, 2 * HS), slice(2 * HS, 3 * HS)
-            r_t = torch.sigmoid(gx[_ixr] + gh[_ixr] + self.gru_bias[_ixr])  # forget
-            z_t = torch.sigmoid(gx[_ixz] + gh[_ixz] + self.gru_bias[_ixz])  # convex pass-through
-            eta_t = torch.tanh(gx[_ixn] + r_t * (h_t @ Whh) + bh)    # hidden
+            r_t = torch.sigmoid(gx[_ixr] + gh[_ixr] + bh[_ixr])  # forget
+            z_t = torch.sigmoid(gx[_ixz] + gh[_ixz] + bh[_ixz])  # convex pass-through
+            eta_t = torch.tanh(gx[_ixn] + r_t * gh[_ixn] + bh[_ixn])    # hidden
             h_t = z_t * h_t + (1 - z_t) * eta_t
 
             hidden_seq.append(h_t.unsqueeze(0))

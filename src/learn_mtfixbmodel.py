@@ -133,10 +133,9 @@ def train(args):
         inputs, outputs, c_ids = model.get_batch(train_iter)
         inputs, outputs = torchify(inputs, outputs, device=device)
 
-        mu, sd = model.Z_mu[c_ids, :], torch.sigmoid(3 * model.Z_logit_s[c_ids, :])
-
         if is_MT:
-            preds, state = model(inputs, mu, sd)
+            mu, sd = model.Z_mu[c_ids, :], torch.sigmoid(3 * model.Z_logit_s[c_ids, :])
+            preds = model(inputs, mu, sd)
         else:
             preds = model(inputs)
 
