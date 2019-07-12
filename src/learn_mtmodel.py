@@ -117,8 +117,7 @@ def train(args):
     if has_ar_noise:
         assert args.ar_coef < 1, "ar_coef must be in [0, 1)."
         # Construct banded AR precision matrix (fn def below)
-        Prec = ar_prec_matrix(args.ar_coef, args.seq_length_out).float()
-        Prec = Prec if args.use_cpu else Prec.cuda()
+        Prec = ar_prec_matrix(args.ar_coef, args.seq_length_out).float().to(device)
 
     for _ in range(args.iterations):
         optimiser.zero_grad()
@@ -198,8 +197,7 @@ def train(args):
             if not has_ar_noise:
                 sqerr = err ** 2
             else:
-                Prec_test = ar_prec_matrix(args.ar_coef, err.size(1)).float()
-                Prec_test = Prec_test if args.use_cpu else Prec_test.cuda()
+                Prec_test = ar_prec_matrix(args.ar_coef, err.size(1)).float().to(device)
                 sqerr = (Prec_test @ err) * err
 
             val_loss = args.human_size * args.seq_length_out * sqerr.mean() / 2
@@ -343,8 +341,6 @@ def main(args=None):
 
     args = parseopts.parse_args(args)
     args = parseopts.initial_arg_transform(args)
-
-    assert args.dropout_p == 0.0, "dropout not implemented yet."
 
     print(args.train_dir)
     os.makedirs(args.train_dir, exist_ok=True)

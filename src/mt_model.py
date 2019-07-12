@@ -164,8 +164,7 @@ class MTGRU(nn.Module):
             Whh, bh, Wih, C, D = self._decoder_par_reshape(psi[bb, :])
             dec = self.partial_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
             if self.residual_output:
-                zero = torch.zeros(inputs.size(1), self.input_size).to(inputs.device)
-                yhat_bb = dec @ C + torch.cat((zero, inputs[bb, :, :] @ D), 1)
+                yhat_bb = dec @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1)
             else:
                 yhat_bb = dec @ C + inputs[bb, :, :] @ D
             states.append(dec[-1, :].unsqueeze(0).detach())
@@ -173,13 +172,6 @@ class MTGRU(nn.Module):
 
         yhats = torch.cat(yhats, dim=0)
         states = torch.cat(states, dim=0)
-        # residual connection?
-        if self.residual_output:
-            if self.HUMAN_SIZE >= self.input_size:
-                yhats = yhats + torch.cat((inputs, torch.zeros(inputs.size(0), inputs.size(1),
-                                                               self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
-            else:
-                yhats = yhats[:, :, :self.input_size] + inputs
 
         return yhats, states
 

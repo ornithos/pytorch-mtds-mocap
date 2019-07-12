@@ -101,6 +101,10 @@ def parse_args(args=None):
     configdict["data_dir"] = os.path.normpath(configdict["data_dir"])
     configdict["train_dir"] = os.path.normpath(configdict["train_dir"])
 
+    # relevant argument checks
+    assert configdict["decoder_size"] % 2 == 0, "decoder size must be divisible by 2"   # since div by 2 for MT model
+    assert configdict["dropout_p"] == 0.0, "dropout not implemented yet."
+
     return _dictNamespace(configdict)
 
 
