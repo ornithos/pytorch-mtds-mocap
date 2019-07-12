@@ -92,6 +92,7 @@ def train(args):
     """Train a MT model on human motion"""
 
     train_iter = read_all_data(args)
+    train_iter.shuffle()
 
     total_num_batches = train_iter.length
 

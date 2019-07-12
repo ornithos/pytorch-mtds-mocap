@@ -405,7 +405,7 @@ class DataIterator:
 
     def __next__(self):
         if self.element < len(self.dataY):
-            while self.i + self.min_size >= self.dataY[self.element].shape[0]:
+            while self.i + self.min_size > self.dataY[self.element].shape[0]:
                 self.element += 1
                 self.i = self.start
                 if self.element >= len(self.dataY):
@@ -455,7 +455,12 @@ def _get_batch(data_iterator, batch_size):
     outputs = np.zeros((batch_size, data_iterator.chunk_size, data_iterator.y_dim), dtype=float)
     ixs = []
     for i in range(batch_size):
-        y, u, ix, is_new_state = next(data_iterator)
+        try:
+            y, u, ix, is_new_state = next(data_iterator)
+        except StopIteration:
+            data_iterator.shuffle()
+            y, u, ix, is_new_state = next(data_iterator)
+
         inputs[i, :, :] = u
         outputs[i, :, :] = y
         ixs.append(ix)
