@@ -396,6 +396,9 @@ class DataIterator:
         self.min_size = min_size
         self.dataY = dataY
         self.dataU = dataU
+        self.y_dim = self.dataY[0].shape[1]
+        self.u_dim = self.dataU[0].shape[1]
+        self.length = self._length()
         self.batch_ids = list(range(self.length()))
 
     def __iter__(self):
@@ -424,10 +427,11 @@ class DataIterator:
     def shuffle(self):
         self.reset()
         all_data = list(self)
-        assert len(all_data) == self.length(), "Error in iterator design. Please contact the library creator."
+        assert len(all_data) == self.length, "Error in iterator design. Please contact the library creator."
         self.batch_ids = np.random.permutation(len(all_data))
         self.dataY = [all_data[i][0] for i in self.batch_ids]
         self.dataU = [all_data[i][1] for i in self.batch_ids]
+        self.length = self._length()
         self.reset()
 
     def reset(self):
@@ -435,24 +439,18 @@ class DataIterator:
         self.element = 0
         self.batch_ix = 0
 
-    def length(self):
+    def _length(self):
         _len = 0
         for y in self.dataY:
             d, r = divmod(y.shape[0] - self.start, self.chunk_size)
             _len += d + (r >= self.min_size)
         return _len
 
-    def y_dim(self):
-        return self.dataY[0].shape[1]
-
-    def u_dim(self):
-        return self.dataU[0].shape[1]
-
 
 def _get_batch(data_iterator, batch_size):
 
     if batch_size <= 0:
-        batch_size = data_iterator.length()
+        batch_size = data_iterator.length
 
     inputs = np.zeros((batch_size, data_iterator.chunk_size, data_iterator.u_dim), dtype=float)
     outputs = np.zeros((batch_size, data_iterator.chunk_size, data_iterator.y_dim), dtype=float)

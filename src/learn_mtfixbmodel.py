@@ -93,7 +93,7 @@ def train(args):
 
     train_iter = read_all_data(args)
 
-    total_num_batches =  train_iter.length()
+    total_num_batches = train_iter.length
 
     model = create_model(args, total_num_batches)
     model = model if args.use_cpu else model.cuda()
