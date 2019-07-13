@@ -28,7 +28,8 @@ class MTGRU(nn.Module):
                  output_dim=64,
                  input_dim=0,
                  dropout=0.0,
-                 residual_output=True):
+                 residual_output=True,
+                 init_state_noise=False):
         """Create the model.
 
         Args:
@@ -55,6 +56,7 @@ class MTGRU(nn.Module):
         self.batch_size = batch_size
         self.dropout = dropout
         self.residual_output = residual_output
+        self.init_state_noise = init_state_noise
         self.k = k
 
         print("Input size is %d" % self.input_size)
@@ -83,6 +85,16 @@ class MTGRU(nn.Module):
         self.gru2_C = Parameter(torch.ones(half_dec_size, self.HUMAN_SIZE)).float()
         self.gru2_D = Parameter(torch.ones(self.input_size, self.HUMAN_SIZE)).float()
         self.gru2_d = Parameter(torch.zeros(self.HUMAN_SIZE)).float()
+
+    def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
+        if zls_lr is None:
+            zls_lr = z_lr
+
+        return [{'params': self.psi_decoder.parameters(), 'lr': mt_lr},
+                {'params': self.rnn2.parameters(), 'lr': static_lr},
+                {'params': [self.gru2_C, self.gru2_D, self.gru2_d], 'lr': static_lr},
+                {'params': [self.Z_mu], 'lr': z_lr},
+                {'params': [self.Z_logit_s], 'lr': zls_lr}]
 
     def _decoder_par_shape(self):
         half_dec_size = self.decoder_size // 2
@@ -118,8 +130,10 @@ class MTGRU(nn.Module):
                 nn.init.zeros_(p.data)
 
     def forward(self, inputs, mu, sd, state=None):
-        batchsize = inputs.shape[0]
-        state = torch.zeros(batchsize, self.decoder_size // 2).to(inputs.device) if state is None else state
+        if self.init_state_noise and state is None:
+            state = torch.randn(self.batch_size, self.decoder_size // 2).float().to(inputs.device)
+        elif state is None:
+            state = torch.zeros(self.batch_size, self.decoder_size // 2).to(inputs.device)
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(sd)
@@ -130,7 +144,7 @@ class MTGRU(nn.Module):
 
         return yhats
 
-    def forward_given_z(self, inputs, z, state=None):
+    def forward_given_z(self, inputs, z, state):
         batchsize = inputs.shape[0]
 
         # Decode from sampled z
@@ -199,7 +213,8 @@ class OpenLoopGRU(nn.Module):
                  output_dim=64,
                  input_dim=0,
                  dropout=0.0,
-                 residual_output=True):
+                 residual_output=True,
+                 init_state_noise=False):
         """Create the model.
 
         Args:
@@ -222,6 +237,7 @@ class OpenLoopGRU(nn.Module):
         self.batch_size = batch_size
         self.dropout = dropout
         self.residual_output = residual_output
+        self.init_state_noise = init_state_noise
 
         print("Input size is %d" % self.input_size)
         print('decoder_state_size = {0}'.format(rnn_decoder_size))
@@ -229,8 +245,15 @@ class OpenLoopGRU(nn.Module):
         self.rnn = nn.GRU(self.input_size, self.decoder_size, batch_first=True)
         self.emission = nn.Linear(self.decoder_size, self.HUMAN_SIZE)
 
+    def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
+        return [{'params': self.parameters(), 'lr': mt_lr}]
+
     def forward(self, inputs):
-        seq, state = self.rnn(inputs)
+        if self.init_state_noise:
+            seq, state = self.rnn(inputs, torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device))
+        else:
+            seq, state = self.rnn(inputs)
+
         yhats = self.emission(seq)
 
         if self.residual_output:
@@ -260,7 +283,8 @@ class DynamicsDict(nn.Module):
                  output_dim=64,
                  input_dim=0,
                  dropout=0.0,
-                 residual_output=True):
+                 residual_output=True,
+                 init_state_noise=False):
         """Create the model.
 
         Args:
@@ -287,6 +311,7 @@ class DynamicsDict(nn.Module):
         self.batch_size = batch_size
         self.dropout = dropout
         self.residual_output = residual_output
+        self.init_state_noise = init_state_noise
         self.k = k
 
         print("Input size is %d" % self.input_size)
@@ -309,6 +334,14 @@ class DynamicsDict(nn.Module):
         # GRU Decoder static weights (all except direct recurrent)
         self.decoder = nn.GRU(self.input_size, rnn_decoder_size, batch_first=True)
 
+    def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
+        if zls_lr is None:
+            zls_lr = z_lr
+
+        return [{'params': self.psi_decoder.parameters(), 'lr': mt_lr},
+                {'params': self.decoder.parameters(), 'lr': static_lr},
+                {'params': [self.Z_mu], 'lr': z_lr},
+                {'params': [self.Z_logit_s], 'lr': zls_lr}]
 
     def _decoder_par_shape(self):
         C = (self.decoder_size, self.HUMAN_SIZE)
@@ -332,8 +365,8 @@ class DynamicsDict(nn.Module):
         return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
 
     def forward(self, inputs, mu, sd, state=None):
-        # state = torch.zeros(batchsize, self.decoder_size).to(inputs.device) if state is None else state
-        state = None
+        if self.init_state_noise and state is None:
+            state = torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device)
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(sd)
@@ -353,14 +386,13 @@ class DynamicsDict(nn.Module):
         mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
         return mu, logstd
 
-    def forward_given_z(self, inputs, z, state=None):
-        assert state is None, "unsupported initial state given"
+    def forward_given_z(self, inputs, z, state):
         batchsize = inputs.shape[0]
 
         # Decode from sampled z
         psi = self.psi_decoder(z)
 
-        dec, state = self.decoder(inputs)
+        dec, state = self.decoder(inputs, state)
 
         #could run this in batch for efficiency but I'm feeling lazy right now.
         yhats = []

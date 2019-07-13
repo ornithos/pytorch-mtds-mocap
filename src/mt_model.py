@@ -29,7 +29,8 @@ class MTGRU(nn.Module):
                  output_dim=64,
                  input_dim=0,
                  dropout=0.0,
-                 residual_output=True):
+                 residual_output=True,
+                 init_state_noise=False):
         """Create the model.
 
         Args:
@@ -57,6 +58,7 @@ class MTGRU(nn.Module):
         self.batch_size = batch_size
         self.dropout = dropout
         self.residual_output = residual_output
+        self.init_state_noise = init_state_noise
         self.k = k
 
         print("Input size is %d" % self.input_size)
@@ -126,8 +128,12 @@ class MTGRU(nn.Module):
                 nn.init.zeros_(p.data)
 
     def forward(self, inputs, outputs, state=None):
-        batchsize = inputs.shape[0]
-        state = torch.zeros(batchsize, self.decoder_size).to(inputs.device) if state is None else state
+        if self.init_state_noise and state is None:
+            state = torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device)
+        elif state is None:
+            state = torch.zeros(self.batch_size, self.decoder_size).to(inputs.device)
+
+        state = torch.zeros(self.batch_size, self.decoder_size).to(inputs.device) if state is None else state
 
         # encode outputs into latent z (pseudo-)posterior
         mu, logstd = self.encode(outputs)
@@ -151,7 +157,7 @@ class MTGRU(nn.Module):
         mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
         return mu, logstd
 
-    def forward_given_z(self, inputs, z, state=None):
+    def forward_given_z(self, inputs, z, state):
         batchsize = inputs.shape[0]
 
         # Decode from sampled z
@@ -281,7 +287,8 @@ class OpenLoopGRU(nn.Module):
                  output_dim=64,
                  input_dim=0,
                  dropout=0.0,
-                 residual_output=True):
+                 residual_output=True,
+                 init_state_noise=False):
         """Create the model.
 
         Args:
@@ -304,6 +311,7 @@ class OpenLoopGRU(nn.Module):
         self.batch_size = batch_size
         self.dropout = dropout
         self.residual_output = residual_output
+        self.init_state_noise = init_state_noise
 
         print("Input size is %d" % self.input_size)
         print('decoder_state_size = {0}'.format(rnn_decoder_size))
@@ -312,7 +320,11 @@ class OpenLoopGRU(nn.Module):
         self.emission = nn.Linear(self.decoder_size, self.HUMAN_SIZE)
 
     def forward(self, inputs):
-        seq, state = self.rnn(inputs)
+        if self.init_state_noise:
+            seq, state = self.rnn(inputs, torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device))
+        else:
+            seq, state = self.rnn(inputs)
+
         yhats = self.emission(seq)
 
         if self.residual_output:
@@ -345,7 +357,8 @@ class DynamicsDict(nn.Module):
                  output_dim=64,
                  input_dim=0,
                  dropout=0.0,
-                 residual_output=True):
+                 residual_output=True,
+                 init_state_noise=False):
         """Create the model.
 
         Args:
@@ -373,6 +386,7 @@ class DynamicsDict(nn.Module):
         self.batch_size = batch_size
         self.dropout = dropout
         self.residual_output = residual_output
+        self.init_state_noise = init_state_noise
         self.k = k
 
         print("Input size is %d" % self.input_size)
@@ -424,8 +438,10 @@ class DynamicsDict(nn.Module):
         return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
 
     def forward(self, inputs, outputs, state=None):
-        # state = torch.zeros(batchsize, self.decoder_size).to(inputs.device) if state is None else state
-        state = None
+        if self.init_state_noise and state is None:
+            state = torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device)
+        elif state is None:
+            state = torch.zeros(self.batch_size, self.decoder_size).to(inputs.device)
 
         # encode outputs into latent z (pseudo-)posterior
         mu, logstd = self.encode(outputs)
@@ -448,14 +464,13 @@ class DynamicsDict(nn.Module):
         mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
         return mu, logstd
 
-    def forward_given_z(self, inputs, z, state=None):
-        assert state is None, "unsupported initial state given"
+    def forward_given_z(self, inputs, z, state):
         batchsize = inputs.shape[0]
 
         # Decode from sampled z
         psi = self.psi_decoder(z)
 
-        dec, state = self.decoder(inputs)
+        dec, state = self.decoder(inputs, state)
 
         #could run this in batch for efficiency but I'm feeling lazy right now.
         yhats = []

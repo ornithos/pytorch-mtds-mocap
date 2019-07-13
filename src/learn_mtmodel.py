@@ -33,7 +33,8 @@ def create_model(args):
         args.human_size,
         args.input_size,
         args.dropout_p,
-        args.residual_velocities)
+        args.residual_velocities,
+        args.init_state_noise)
 
     if len(args.load) <= 0:
         return model
@@ -53,7 +54,8 @@ def create_model_k0(args):
         args.human_size,
         args.input_size,
         args.dropout_p,
-        args.residual_velocities)
+        args.residual_velocities,
+        args.init_state_noise)
 
     if len(args.load) <= 0:
         return model
@@ -77,7 +79,8 @@ def create_model_DD(args):
         args.human_size,
         args.input_size,
         args.dropout_p,
-        args.residual_velocities)
+        args.residual_velocities,
+        args.init_state_noise)
 
     if len(args.load) <= 0:
         return model

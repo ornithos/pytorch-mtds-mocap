@@ -34,7 +34,8 @@ def create_model(args, total_num_batches):
         args.human_size,
         args.input_size,
         args.dropout_p,
-        args.residual_velocities)
+        args.residual_velocities,
+        args.init_state_noise)
 
     if len(args.load) <= 0:
         return model
@@ -54,7 +55,8 @@ def create_model_k0(args, total_num_batches):
         args.human_size,
         args.input_size,
         args.dropout_p,
-        args.residual_velocities)
+        args.residual_velocities,
+        args.init_state_noise)
 
     if len(args.load) <= 0:
         return model
@@ -78,7 +80,8 @@ def create_model_DD(args, total_num_batches):
         args.human_size,
         args.input_size,
         args.dropout_p,
-        args.residual_velocities)
+        args.residual_velocities,
+        args.init_state_noise)
 
     if len(args.load) <= 0:
         return model
@@ -106,14 +109,14 @@ def train(args):
 
     step_time, loss = 0, 0
 
+    mt_lr, z_lr, zls_lr = 1e-3, 1e-3, 1e-3
+    pars_lrs = model.get_params_optim_dicts(mt_lr, args.learning_rate, z_lr, zls_lr=zls_lr)
     if args.optimiser.upper() == "SGD":
-        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        optimiser = optim.SGD(pars_lrs, weight_decay=args.weight_decay)
     elif args.optimiser.upper() == "NESTEROV":
-        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.8, nesterov=True,
-                              weight_decay=args.weight_decay)
+        optimiser = optim.SGD(pars_lrs, momentum=0.8, nesterov=True, weight_decay=args.weight_decay)
     elif args.optimiser.upper() == "ADAM":
-        optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas=(0.9, 0.999),
-                               weight_decay=args.weight_decay)
+        optimiser = optim.Adam(pars_lrs, betas=(0.9, 0.999), weight_decay=args.weight_decay)
     else:
         Exception("Unknown optimiser type: {:d}. Try 'SGD', 'Nesterov' or 'Adam'")
 

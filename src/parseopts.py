@@ -54,6 +54,8 @@ def parse_args(args=None):
                         help='Autoregressive coefficient (default is off)', type=float)
     parser.add_argument('--dynamicsdict', dest='dynamicsdict', action="store_true",
                         help='Dynamics Dictionary Architecture')
+    parser.add_argument('--init_state_noise', dest='init_state_noise', action="store_true",
+                        help='Initialise each time series chunk state with noise (instead of 0).')
 
     # Directories
     parser.add_argument('--data_dir', dest='data_dir',
