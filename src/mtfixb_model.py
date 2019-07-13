@@ -412,7 +412,7 @@ class DynamicsDict(nn.Module):
 
 
 class DataIterator:
-    def __init__(self, dataY, dataU, chunk_size, min_size, start=0, checks=True):
+    def __init__(self, dataY, dataU, chunk_size, min_size, start=0, checks=True, overlap2=False):
         if checks:
             assert len(dataY) == len(dataU), "Y and U lists have a different number of elements"
             for i in range(len(dataY)):
@@ -425,10 +425,14 @@ class DataIterator:
         self.batch_ix = 0
         self.chunk_size = chunk_size
         self.min_size = min_size
+        self.orig_dataY = dataY
+        self.orig_dataU = dataU
         self.dataY = dataY
         self.dataU = dataU
         self.y_dim = self.dataY[0].shape[1]
         self.u_dim = self.dataU[0].shape[1]
+        self.increment_start = np.array([start, (start + chunk_size // 2) % chunk_size] if overlap2 else [start])
+        self.c_overlap = 0
         self.length = self._length()
         self.batch_ids = list(range(self.length))
 
@@ -456,33 +460,54 @@ class DataIterator:
         else:
             raise StopIteration()
 
-    def shuffle(self):
-        self.reset()
+    def shuffle(self, increment_start=False):
+        self.reset_data(increment_start=increment_start)
+        self.reset_indices()
         all_data = list(self)
-        assert len(all_data) == self.length, "Error in iterator design. Please contact the library creator."
+        self.reset_indices()
         self.batch_ids = np.random.permutation(len(all_data))
         self.dataY = [all_data[i][0] for i in self.batch_ids]
         self.dataU = [all_data[i][1] for i in self.batch_ids]
         self.length = self._length()
-        self.reset()
 
-    def reset(self):
+        # The data are now partitioned st each partition begins at `start`, so init value should always be zero.
+        self.start = 0
+        self.i = 0
+        assert len(all_data) == self.length, "Error in iterator design. Please contact the library creator."
+
+    def reset_data(self, increment_start=False):
+        if increment_start:
+            self.c_overlap = (self.c_overlap + 1) % len(self.increment_start)
+            self.start = self.increment_start[self.c_overlap]
+        self.dataY = self.orig_dataY
+        self.dataU = self.orig_dataU
+        self.length = self._length()
+        self.batch_ids = list(range(self.length))
+
+    def reset_indices(self):
         self.i = self.start
         self.element = 0
         self.batch_ix = 0
 
-    def _length(self):
+    def _length(self, start=None):
+        if start is None: start = self.increment_start[self.c_overlap]
+
         _len = 0
-        for y in self.dataY:
-            d, r = divmod(y.shape[0] - self.start, self.chunk_size)
+        for y in self.orig_dataY:
+            d, r = divmod(y.shape[0] - start, self.chunk_size)
             _len += d + (r >= self.min_size)
+        return _len
+
+    def total_length(self):
+        _len = 0
+        for start in self.increment_start:
+            _len += self._length(start=start)
         return _len
 
 
 def _get_batch(data_iterator, batch_size):
 
-    if batch_size <= 0:
-        batch_size = data_iterator.length
+    if batch_size <= 0: batch_size = data_iterator.length
 
     inputs = np.zeros((batch_size, data_iterator.chunk_size, data_iterator.u_dim), dtype=float)
     outputs = np.zeros((batch_size, data_iterator.chunk_size, data_iterator.y_dim), dtype=float)
@@ -491,7 +516,7 @@ def _get_batch(data_iterator, batch_size):
         try:
             y, u, ix, is_new_state = next(data_iterator)
         except StopIteration:
-            data_iterator.shuffle()
+            data_iterator.shuffle(increment_start=True)
             y, u, ix, is_new_state = next(data_iterator)
 
         inputs[i, :, :] = u

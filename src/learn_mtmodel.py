@@ -344,6 +344,8 @@ def main(args=None):
 
     args = parseopts.parse_args(args)
     args = parseopts.initial_arg_transform(args)
+    if not args.overlap_windows:
+        print("Ignoring setting overlap_windows = False since this is the non fixb version.")
 
     print(args.train_dir)
     os.makedirs(args.train_dir, exist_ok=True)

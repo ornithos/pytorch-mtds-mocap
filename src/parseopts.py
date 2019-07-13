@@ -28,6 +28,8 @@ def parse_args(args=None):
                         help='Optimiser: SGD, Nesterov, or Adam', type=str)
     parser.add_argument('--first3_prec', dest='first3_prec',
                         help='Precision of noise model of first 3 outputs.', type=float)
+    parser.add_argument('--overlap_windows', dest='overlap_windows', action="store_true",
+                        help='Use overlapping partition of training set rather than disjoint tiling.')
 
     # Architecture
     parser.add_argument('--no_residual_velocities', dest='residual_velocities',

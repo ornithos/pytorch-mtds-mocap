@@ -97,7 +97,7 @@ def train(args):
     train_iter = read_all_data(args)
     train_iter.shuffle()
 
-    total_num_batches = train_iter.length
+    total_num_batches = train_iter.total_length()
 
     model = create_model(args, total_num_batches)
     model = model if args.use_cpu else model.cuda()
@@ -345,7 +345,7 @@ def read_all_data(args):
 
     print("done reading data.")
 
-    return mtfixb_model.DataIterator(train_set_Y, train_set_U, 64, min_size=64)
+    return mtfixb_model.DataIterator(train_set_Y, train_set_U, 64, min_size=64, overlap2=args.overlap_windows)
 
 
 def torchify(*args, device="cpu"):
