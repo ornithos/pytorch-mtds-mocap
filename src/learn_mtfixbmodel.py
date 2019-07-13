@@ -193,6 +193,10 @@ def train(args):
         if is_hard_em and zls_ix is not None and current_step == args.hard_em_iters:
             optimiser.param_groups[zls_ix]['lr'] = z_lr
 
+            orig_std = model.Z_mu.data.std(dim=0)
+            model.Z_mu.data = model.Z_mu.data / orig_std
+            model.psi_decoder[0].weight.data = model.psi_decoder[0].weight.data * orig_std
+
         # Once in a while, we save checkpoint, print statistics, and run evals.
         if current_step % args.test_every == 0:
             model.eval()
