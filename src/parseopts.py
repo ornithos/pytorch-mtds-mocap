@@ -30,6 +30,12 @@ def parse_args(args=None):
                         help='Precision of noise model of first 3 outputs.', type=float)
     parser.add_argument('--overlap_windows', dest='overlap_windows', action="store_true",
                         help='Use overlapping partition of training set rather than disjoint tiling.')
+    parser.add_argument('--learning_rate_z', dest='learning_rate_z', default=-1, type=float,
+                        help='Learning rate of latent Z (posterior )distribution pars (-1 = same as lr)')
+    parser.add_argument('--learning_rate_mt', dest='learning_rate_mt', default=-1, type=float,
+                        help='Learning rate of multi-task params (-1 = same as lr)')
+    parser.add_argument('--hard_em_iters', dest='hard_em_iters', default=1000, type=int,
+                        help='Number of iterations to perform hard EM (hold z sigma at small constant)')
 
     # Architecture
     parser.add_argument('--no_residual_velocities', dest='residual_velocities',

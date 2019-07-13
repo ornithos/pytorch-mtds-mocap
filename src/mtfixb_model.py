@@ -94,7 +94,7 @@ class MTGRU(nn.Module):
                 {'params': self.rnn2.parameters(), 'lr': static_lr},
                 {'params': [self.gru2_C, self.gru2_D, self.gru2_d], 'lr': static_lr},
                 {'params': [self.Z_mu], 'lr': z_lr},
-                {'params': [self.Z_logit_s], 'lr': zls_lr}]
+                {'params': [self.Z_logit_s], 'lr': zls_lr}], -1
 
     def _decoder_par_shape(self):
         half_dec_size = self.decoder_size // 2
@@ -246,7 +246,7 @@ class OpenLoopGRU(nn.Module):
         self.emission = nn.Linear(self.decoder_size, self.HUMAN_SIZE)
 
     def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
-        return [{'params': self.parameters(), 'lr': mt_lr}]
+        return [{'params': self.parameters(), 'lr': mt_lr}], None
 
     def forward(self, inputs):
         if self.init_state_noise:
@@ -341,7 +341,7 @@ class DynamicsDict(nn.Module):
         return [{'params': self.psi_decoder.parameters(), 'lr': mt_lr},
                 {'params': self.decoder.parameters(), 'lr': static_lr},
                 {'params': [self.Z_mu], 'lr': z_lr},
-                {'params': [self.Z_logit_s], 'lr': zls_lr}]
+                {'params': [self.Z_logit_s], 'lr': zls_lr}], -1
 
     def _decoder_par_shape(self):
         C = (self.decoder_size, self.HUMAN_SIZE)

@@ -103,14 +103,18 @@ def train(args):
     model = model if args.use_cpu else model.cuda()
 
     has_weight = not np.isclose(args.first3_prec, 1.0)
+    is_hard_em = args.hard_em_iters > 0
     is_MT = args.k > 0
     current_step = 0
     previous_losses = []
 
     step_time, loss = 0, 0
 
-    mt_lr, z_lr, zls_lr = 1e-3, 1e-3, 1e-3
-    pars_lrs = model.get_params_optim_dicts(mt_lr, args.learning_rate, z_lr, zls_lr=zls_lr)
+    mt_lr = args.learning_rate_mt if args.learning_rate_mt >= 0 else args.learning_rate
+    z_lr = args.learning_rate_z if args.learning_rate_z >= 0 else args.learning_rate
+    zls_lr = 0 if is_hard_em else z_lr
+
+    pars_lrs, zls_ix = model.get_params_optim_dicts(mt_lr, args.learning_rate, z_lr, zls_lr=zls_lr)
     if args.optimiser.upper() == "SGD":
         optimiser = optim.SGD(pars_lrs, weight_decay=args.weight_decay)
     elif args.optimiser.upper() == "NESTEROV":
@@ -181,10 +185,13 @@ def train(args):
 
         # Decay learning rate (if appl.)
         if current_step % args.learning_rate_step == 0:
-            args.learning_rate = args.learning_rate * args.learning_rate_decay_factor
             for param_group in optimiser.param_groups:
-                param_group['lr'] = args.learning_rate
-            print("Decay learning rate. New value at " + str(args.learning_rate))
+                param_group['lr'] *= args.learning_rate_decay_factor
+            print("Decay learning rate. New value at " + str(optimiser.param_groups[0]['lr']))
+
+        # remove Hard EM spec (if appl.)
+        if is_hard_em and zls_ix is not None and current_step == args.hard_em_iters:
+            optimiser.param_groups[zls_ix]['lr'] = z_lr
 
         # Once in a while, we save checkpoint, print statistics, and run evals.
         if current_step % args.test_every == 0:
