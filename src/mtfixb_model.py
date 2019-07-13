@@ -130,10 +130,11 @@ class MTGRU(nn.Module):
                 nn.init.zeros_(p.data)
 
     def forward(self, inputs, mu, sd, state=None):
+        batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise and state is None:
-            state = torch.randn(self.batch_size, self.decoder_size // 2).float().to(inputs.device)
+            state = torch.randn(batch_size, self.decoder_size // 2).float().to(inputs.device)
         elif state is None:
-            state = torch.zeros(self.batch_size, self.decoder_size // 2).to(inputs.device)
+            state = torch.zeros(batch_size, self.decoder_size // 2).to(inputs.device)
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(sd)
@@ -249,8 +250,9 @@ class OpenLoopGRU(nn.Module):
         return [{'params': self.parameters(), 'lr': mt_lr}], None
 
     def forward(self, inputs):
+        batch_size = inputs.size(0)    # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise:
-            seq, state = self.rnn(inputs, torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device))
+            seq, state = self.rnn(inputs, torch.randn(1, batch_size, self.decoder_size).float().to(inputs.device))
         else:
             seq, state = self.rnn(inputs)
 
@@ -365,8 +367,9 @@ class DynamicsDict(nn.Module):
         return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
 
     def forward(self, inputs, mu, sd, state=None):
+        batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise and state is None:
-            state = torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device)
+            state = torch.randn(1, batch_size, self.decoder_size).float().to(inputs.device)
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(sd)

@@ -128,12 +128,11 @@ class MTGRU(nn.Module):
                 nn.init.zeros_(p.data)
 
     def forward(self, inputs, outputs, state=None):
+        batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise and state is None:
-            state = torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device)
+            state = torch.randn(batch_size, self.decoder_size).float().to(inputs.device)
         elif state is None:
-            state = torch.zeros(self.batch_size, self.decoder_size).to(inputs.device)
-
-        state = torch.zeros(self.batch_size, self.decoder_size).to(inputs.device) if state is None else state
+            state = torch.zeros(batch_size, self.decoder_size).to(inputs.device)
 
         # encode outputs into latent z (pseudo-)posterior
         mu, logstd = self.encode(outputs)
@@ -320,8 +319,9 @@ class OpenLoopGRU(nn.Module):
         self.emission = nn.Linear(self.decoder_size, self.HUMAN_SIZE)
 
     def forward(self, inputs):
+        batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise:
-            seq, state = self.rnn(inputs, torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device))
+            seq, state = self.rnn(inputs, torch.randn(1, batch_size, self.decoder_size).float().to(inputs.device))
         else:
             seq, state = self.rnn(inputs)
 
@@ -438,10 +438,11 @@ class DynamicsDict(nn.Module):
         return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
 
     def forward(self, inputs, outputs, state=None):
+        batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise and state is None:
-            state = torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device)
+            state = torch.randn(1, batch_size, self.decoder_size).float().to(inputs.device)
         elif state is None:
-            state = torch.zeros(1, self.batch_size, self.decoder_size).to(inputs.device)
+            state = torch.zeros(1, batch_size, self.decoder_size).to(inputs.device)
 
         # encode outputs into latent z (pseudo-)posterior
         mu, logstd = self.encode(outputs)
