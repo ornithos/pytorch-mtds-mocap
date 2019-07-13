@@ -321,7 +321,7 @@ class OpenLoopGRU(nn.Module):
 
     def forward(self, inputs):
         if self.init_state_noise:
-            seq, state = self.rnn(inputs, torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device))
+            seq, state = self.rnn(inputs, torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device))
         else:
             seq, state = self.rnn(inputs)
 
@@ -439,9 +439,9 @@ class DynamicsDict(nn.Module):
 
     def forward(self, inputs, outputs, state=None):
         if self.init_state_noise and state is None:
-            state = torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device)
+            state = torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device)
         elif state is None:
-            state = torch.zeros(self.batch_size, self.decoder_size).to(inputs.device)
+            state = torch.zeros(1, self.batch_size, self.decoder_size).to(inputs.device)
 
         # encode outputs into latent z (pseudo-)posterior
         mu, logstd = self.encode(outputs)

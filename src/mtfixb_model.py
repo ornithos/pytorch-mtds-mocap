@@ -250,7 +250,7 @@ class OpenLoopGRU(nn.Module):
 
     def forward(self, inputs):
         if self.init_state_noise:
-            seq, state = self.rnn(inputs, torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device))
+            seq, state = self.rnn(inputs, torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device))
         else:
             seq, state = self.rnn(inputs)
 
@@ -366,7 +366,7 @@ class DynamicsDict(nn.Module):
 
     def forward(self, inputs, mu, sd, state=None):
         if self.init_state_noise and state is None:
-            state = torch.randn(self.batch_size, self.decoder_size).float().to(inputs.device)
+            state = torch.randn(1, self.batch_size, self.decoder_size).float().to(inputs.device)
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(sd)
