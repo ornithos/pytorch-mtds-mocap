@@ -83,8 +83,12 @@ class MTGRU(nn.Module):
         # static GRU
         self.rnn2 = nn.GRU(self.input_size, half_dec_size, batch_first=True)
         self.gru2_C = Parameter(torch.ones(half_dec_size, self.HUMAN_SIZE)).float()
-        self.gru2_D = Parameter(torch.ones(self.input_size, self.HUMAN_SIZE)).float()
         self.gru2_d = Parameter(torch.zeros(self.HUMAN_SIZE)).float()
+
+        if self.residual_output:
+            self.gru2_D = Parameter(torch.ones(self.input_size, max(0, self.HUMAN_SIZE - self.input_size))).float()
+        else:
+            self.gru2_D = Parameter(torch.ones(self.input_size, self.HUMAN_SIZE)).float()
 
     def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
         if zls_lr is None:
@@ -102,11 +106,12 @@ class MTGRU(nn.Module):
         bh = (half_dec_size * 3,)
         Wih = (self.input_size, half_dec_size * 3)
         C = (self.decoder_size // 2, self.HUMAN_SIZE)
+        d = self.HUMAN_SIZE
         if self.residual_output:
             D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
         else:
             D = (self.input_size, self.HUMAN_SIZE)
-        return Whh, bh, Wih, C, D
+        return Whh, bh, Wih, C, D, d
 
     def _decoder_par_size(self):
         return [np.prod(x) for x in self._decoder_par_shape()]
@@ -155,7 +160,7 @@ class MTGRU(nn.Module):
         yhats = []
         # states = []
         for bb in range(batchsize):
-            Whh, bh, Wih, C, D = self._decoder_par_reshape(psi[bb, :])
+            Whh, bh, Wih, C, D, d = self._decoder_par_reshape(psi[bb, :])
             dec = self.mutable_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
             if self.residual_output:
                 yhat_bb = dec @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1)
@@ -165,7 +170,12 @@ class MTGRU(nn.Module):
             yhats.append(yhat_bb.unsqueeze(0))
 
         seq2, state2 = self.rnn2(inputs)
-        yhats2 = seq2 @ C
+        yhats2 = seq2 @ self.gru2_C + self.gru2_d
+
+        if self.residual_output:
+            yhats2 = yhats2 + torch.cat((inputs[:, :, :self.HUMAN_SIZE], inputs @ self.gru2_D), 2)
+        else:
+            yhats2 = yhats2 + inputs @ self.gru2_D
 
         yhats1 = torch.cat(yhats, dim=0)
         # states = torch.cat(states, dim=0)
