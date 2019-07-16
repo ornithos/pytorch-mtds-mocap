@@ -5,12 +5,11 @@ import sys
 import time
 
 import numpy as np
-
-import mtfixb_model
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
 
+import mtfixb_model
 import parseopts
 
 
@@ -38,6 +37,9 @@ def create_model(args, total_num_batches):
         args.init_state_noise)
 
     if len(args.load) <= 0:
+        if len(args.load_gru2) > 0:
+            print("Loading GRU2 model")
+            model = load_gru2(model, args.load_gru2, args.use_cpu)
         return model
 
     print("Loading model")
@@ -68,6 +70,9 @@ def create_model_k0(args, total_num_batches):
 
 def create_model_DD(args, total_num_batches):
     """Create MT model and initialize or load parameters in session."""
+
+    if len(args.load_gru2) > 0:
+        NotImplementedError("GRU2 load not yet implemented for Dynamics Dict.")
 
     model = mtfixb_model.DynamicsDict(
         args.seq_length_out,
@@ -313,6 +318,21 @@ def ar_prec_matrix(rho, n):
     Prec[i == j + 2] = - rho
     return torch.tensor(Prec)
 
+
+def load_gru2(model, gru2_filename, use_cpu):
+    model_gru2 = torch.load(gru2_filename, map_location='cpu') if use_cpu else torch.load(gru2_filename)
+    if model_gru2.k == 0:
+        model.rnn2 = model_gru2.rnn
+        model.gru2_C = model_gru2.emission.weight
+        model.gru2_d = model_gru2.emission.bias
+        model.gru2_D.data = torch.zeros_like(model.gru2_D.data)
+    else:
+        model.rnn2 = model_gru2.rnn2
+        model.gru2_C = model_gru2.gru2_C
+        model.gru2_D = model_gru2.gru2_D
+        model.gru2_d = model_gru2.gru2_d
+
+    return model
 
 def read_all_data(args):
     """

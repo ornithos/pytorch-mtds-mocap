@@ -2,7 +2,6 @@ import os
 import argparse
 import configparser
 
-
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description='Train MT-RNN for human pose estimation')
     parser.add_argument('--style_ix', dest='style_ix',
@@ -30,17 +29,16 @@ def parse_args(args=None):
                         help='Precision of noise model of first 3 outputs.', type=float)
     parser.add_argument('--overlap_windows', dest='overlap_windows', action="store_true",
                         help='Use overlapping partition of training set rather than disjoint tiling.')
-    parser.add_argument('--learning_rate_z', dest='learning_rate_z', default=-1, type=float,
+    parser.add_argument('--learning_rate_z', dest='learning_rate_z', type=float,
                         help='Learning rate of latent Z (posterior )distribution pars (-1 = same as lr)')
-    parser.add_argument('--learning_rate_mt', dest='learning_rate_mt', default=-1, type=float,
+    parser.add_argument('--learning_rate_mt', dest='learning_rate_mt', type=float,
                         help='Learning rate of multi-task params (-1 = same as lr)')
-    parser.add_argument('--hard_em_iters', dest='hard_em_iters', default=1000, type=int,
+    parser.add_argument('--hard_em_iters', dest='hard_em_iters', type=int,
                         help='Number of iterations to perform hard EM (hold z sigma at small constant)')
 
     # Architecture
     parser.add_argument('--no_residual_velocities', dest='residual_velocities',
                         help='Add a residual connection that effectively models velocities', action='store_false')
-
     parser.add_argument('--decoder_size', dest='decoder_size',
                         help='Size of decoder recurrent state.', type=int)
     parser.add_argument('--encoder_size', dest='encoder_size',
@@ -66,16 +64,13 @@ def parse_args(args=None):
                         help='Initialise each time series chunk state with noise (instead of 0).')
 
     # Directories
-    parser.add_argument('--data_dir', dest='data_dir',
-                        help='Data directory', type=str)
-    parser.add_argument('--train_dir', dest='train_dir',
-                        help='Training directory', type=str)
-    parser.add_argument('--use_cpu', dest='use_cpu',
-                        help='', action='store_true')
-    parser.add_argument('--load', dest='load',
-                        help='Try to load a previous checkpoint.', type=str)
-    parser.add_argument('--sample', dest='sample',
-                        help='Set to True for sampling.', action='store_true')
+    parser.add_argument('--data_dir', dest='data_dir', help='Data directory', type=str)
+    parser.add_argument('--train_dir', dest='train_dir', help='Training directory', type=str)
+    parser.add_argument('--use_cpu', dest='use_cpu', help='', action='store_true')
+    parser.add_argument('--load', dest='load', help='Filepath. Try to load a previous checkpoint.', type=str)
+    parser.add_argument('--load_gru2', dest='load_gru2', help='Filepath. Load a k=0 checkpoint to gru2' +
+                        ' for a k > 0 MT model.', type=str)
+    parser.add_argument('--sample', dest='sample', help='Set to True for sampling.', action='store_true')
     parser.add_argument('--input_fname', dest='input_fname', type=str, help="name of input file")
     parser.add_argument('--output_fname', dest='output_fname', type=str, help="name of output file")
     parser.add_argument('--stylelkp_fname', dest='stylelkp_fname', type=str, help="name of style_lkp file")
@@ -97,7 +92,7 @@ def parse_args(args=None):
         with open(config_fname) as f:
             config.read_file(f)
     except IOError:
-        raise FileNotFoundError("File {:s} does not exist in current working directory".format(config_fname))
+        raise FileNotFoundError("Config file {:s} does not exist in current working directory.".format(config_fname))
 
     # flatten config dicts
     configdict = {}
@@ -119,8 +114,12 @@ def parse_args(args=None):
     configdict["train_dir"] = os.path.normpath(configdict["train_dir"])
 
     # relevant argument checks
-    assert configdict["decoder_size"] % 2 == 0, "decoder size must be divisible by 2"   # since div by 2 for MT model
+    assert configdict["decoder_size"] % 2 == 0, "decoder size must be divisible by 2."   # since div by 2 for MT model
     assert configdict["dropout_p"] == 0.0, "dropout not implemented yet."
+    assert not (len(configdict["load_gru2"]) > 0 and configdict["k"] == 0), \
+        "load_gru2 only available for MT models (k>0)."
+    assert not (len(configdict["load_gru2"]) > 0 and len(configdict["load"]) > 0), \
+        "Only one of 'load' and 'load_gru2' arguments may be supplied."
 
     return _dictNamespace(configdict)
 
