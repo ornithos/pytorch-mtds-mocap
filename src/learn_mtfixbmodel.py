@@ -179,7 +179,11 @@ def train(args):
         step_loss = step_loss.cpu().data.numpy()
 
         if current_step % 10 == 0:
-            print("step {0:04d}; step_loss: {1:.4f}".format(current_step, step_loss))
+            if is_MT:
+                KLD_part = KLD.cpu().data.numpy()
+                print("step {0:04d}; step_loss: {1:.4f} ({2:.4f})".format(current_step, step_loss, step_loss-KLD_part))
+            else:
+                print("step {0:04d}; step_loss: {1:.4f}".format(current_step, step_loss))
 
         step_time += (time.time() - start_time) / args.test_every
         loss += step_loss / args.test_every
