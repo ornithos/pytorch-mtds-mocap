@@ -321,9 +321,9 @@ def ar_prec_matrix(rho, n):
 
 def load_gru2(model, gru2_filename, use_cpu):
     model_gru2 = torch.load(gru2_filename, map_location='cpu') if use_cpu else torch.load(gru2_filename)
-    if model_gru2.k == 0:
+    if isinstance(model_gru2, mtfixb_model.OpenLoopGRU):
         model.rnn2 = model_gru2.rnn
-        model.gru2_C = model_gru2.emission.weight
+        model.gru2_C = torch.nn.Parameter(model_gru2.emission.weight.data.t())
         model.gru2_d = model_gru2.emission.bias
         model.gru2_D.data = torch.zeros_like(model.gru2_D.data)
     else:
