@@ -86,9 +86,11 @@ class MTGRU(nn.Module):
         self.gru2_d = Parameter(torch.zeros(self.HUMAN_SIZE)).float()
 
         if self.residual_output:
-            self.gru2_D = Parameter(torch.ones(self.input_size, max(0, self.HUMAN_SIZE - self.input_size))).float()
+            self.gru2_D = Parameter(torch.zeros(self.input_size, max(0, self.HUMAN_SIZE - self.input_size))).float()
         else:
-            self.gru2_D = Parameter(torch.ones(self.input_size, self.HUMAN_SIZE)).float()
+            self.gru2_D = Parameter(torch.zeros(self.input_size, self.HUMAN_SIZE)).float()
+
+        self.init_weights((self.gru2_C, self.gru2_D))
 
     def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
         if zls_lr is None:
