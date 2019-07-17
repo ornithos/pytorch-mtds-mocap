@@ -25,11 +25,13 @@ def create_model(args, total_num_batches):
     model = mtfixb_model.MTGRU(
         args.seq_length_out,
         args.decoder_size,
+        args.decoder_size2,
         args.batch_size,
         total_num_batches,
         args.k,
         args.size_psi_hidden,
         args.size_psi_lowrank,
+        args.bottleneck,
         args.human_size,
         args.input_size,
         args.dropout_p,
@@ -37,9 +39,9 @@ def create_model(args, total_num_batches):
         args.init_state_noise)
 
     if len(args.load) <= 0:
-        if len(args.load_gru2) > 0:
+        if len(args.load_layer1) > 0:
             print("Loading GRU2 model")
-            model = load_gru2(model, args.load_gru2, args.use_cpu)
+            model = load_layer1(model, args.load_layer1, args.use_cpu)
         return model
 
     print("Loading model")
@@ -71,8 +73,8 @@ def create_model_k0(args, total_num_batches):
 def create_model_DD(args, total_num_batches):
     """Create MT model and initialize or load parameters in session."""
 
-    if len(args.load_gru2) > 0:
-        NotImplementedError("GRU2 load not yet implemented for Dynamics Dict.")
+    if len(args.load_layer1) > 0:
+        NotImplementedError("Layer 1 load not yet implemented for Dynamics Dict.")
 
     model = mtfixb_model.DynamicsDict(
         args.seq_length_out,
@@ -147,7 +149,8 @@ def train(args):
         inputs, outputs = torchify(inputs, outputs, device=device)
 
         if is_MT:
-            mu, sd = model.Z_mu[c_ids, :], torch.sigmoid(3 * model.Z_logit_s[c_ids, :])
+            mu = model.mt_net.Z_mu[c_ids, :]
+            sd = torch.sigmoid(3 * model.mt_net.Z_logit_s[c_ids, :])
             preds = model(inputs, mu, sd)
         else:
             preds = model(inputs)
@@ -202,9 +205,9 @@ def train(args):
         if is_hard_em and zls_ix is not None and current_step == args.hard_em_iters:
             optimiser.param_groups[zls_ix]['lr'] = z_lr
 
-            orig_std = model.Z_mu.data.std(dim=0)
-            model.Z_mu.data = model.Z_mu.data / orig_std
-            model.psi_decoder[0].weight.data = model.psi_decoder[0].weight.data * orig_std
+            orig_std = model.mt_net.Z_mu.data.std(dim=0)
+            model.mt_net.Z_mu.data = model.mt_net.Z_mu.data / orig_std
+            model.mt_net.psi_decoder[0].weight.data = model.mt_net.psi_decoder[0].weight.data * orig_std
 
         # Once in a while, we save checkpoint, print statistics, and run evals.
         if current_step % args.test_every == 0:
@@ -323,18 +326,13 @@ def ar_prec_matrix(rho, n):
     return torch.tensor(Prec)
 
 
-def load_gru2(model, gru2_filename, use_cpu):
-    model_gru2 = torch.load(gru2_filename, map_location='cpu') if use_cpu else torch.load(gru2_filename)
-    if isinstance(model_gru2, mtfixb_model.OpenLoopGRU):
-        model.rnn2 = model_gru2.rnn
-        model.gru2_C = torch.nn.Parameter(model_gru2.emission.weight.data.t())
-        model.gru2_d = model_gru2.emission.bias
-        model.gru2_D.data = torch.zeros_like(model.gru2_D.data)
+def load_layer1(model, layer1_filename, use_cpu):
+    model_gru1 = torch.load(layer1_filename, map_location='cpu') if use_cpu else torch.load(layer1_filename)
+    if isinstance(model_gru1, mtfixb_model.OpenLoopGRU):
+        model.layer1_rnn = model_gru1.rnn
+        # model.layer1_linear = model_gru2.emission
     else:
-        model.rnn2 = model_gru2.rnn2
-        model.gru2_C = model_gru2.gru2_C
-        model.gru2_D = model_gru2.gru2_D
-        model.gru2_d = model_gru2.gru2_d
+        model.layer1_rnn = model_gru1.rnn2
 
     return model
 

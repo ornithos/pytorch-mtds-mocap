@@ -19,6 +19,106 @@ class MTGRU(nn.Module):
 
     def __init__(self,
                  target_seq_len,
+                 hidden_size1,
+                 hidden_size2,
+                 batch_size,
+                 total_num_batches,
+                 k,
+                 n_psi_hidden,
+                 n_psi_lowrank,
+                 bottleneck=np.Inf,
+                 output_dim=64,
+                 input_dim=0,
+                 dropout=0.0,
+                 residual_output=True,
+                 init_state_noise=False):
+        """Create the model.
+
+        Args:
+          target_seq_len: length of the target sequence.
+          rnn_decoder_size: number of units in the rnn.
+          rnn_encoder_size: number of units in the MT encoder rnn.
+          batch_size: the size of the batches used during the forward pass.
+          k: the size of the Multi-Task latent space.
+          n_psi_hidden: the size of the nonlinear hidden layer for generating parameters psi.
+          n_psi_lowrank: the size of the linear subspace in which psi lives (to reduce par count).
+          output_dim: instantaneous dimension of output (size of vector emitted at each time t).
+          input_dim: size of each input vector at each time t.
+          dropout: probability of dropout used for encoding.
+          residual_output: passes the inputs directly to output via residual connection. If the output dim > input dim
+            as is typically the case when taking the modelled root-feet joints as input, only the first input_dim
+            outputs are affected.
+        """
+        super(MTGRU, self).__init__()
+
+        self.HUMAN_SIZE = output_dim
+        self.input_size = input_dim
+        self.target_seq_len = target_seq_len
+        self.hidden_size1 = hidden_size1
+        self.hidden_size2 = hidden_size2
+        self.interlayer_dim = np.min([bottleneck, hidden_size2, hidden_size1])
+        self.batch_size = batch_size
+        self.dropout = dropout
+        self.residual_output = residual_output
+        self.init_state_noise = init_state_noise
+        self.k = k
+
+        print("==== MTGRU ====")
+        print("Input size is %d" % self.input_size)
+        print('hidden state size = {0}'.format(hidden_size1))
+        print('layer 1 output size = {0}'.format(self.interlayer_dim))
+
+        self.mt_net = MTModule(
+            target_seq_len,
+            hidden_size2,
+            batch_size,
+            total_num_batches,
+            k,
+            n_psi_hidden,
+            n_psi_lowrank,
+            output_dim=output_dim,
+            input_dim=self.interlayer_dim,
+            dropout=dropout,
+            residual_output=residual_output,
+            init_state_noise=init_state_noise)
+
+        # Layer 1 GRU
+        self.layer1_rnn = nn.GRU(self.input_size, hidden_size1, batch_first=True)
+        self.layer1_linear = nn.Linear(self.hidden_size1, self.interlayer_dim)
+
+    def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
+        if zls_lr is None:
+            zls_lr = z_lr
+
+        return [{'params': self.mt_net.psi_decoder.parameters(), 'lr': mt_lr},
+                {'params': self.layer1_rnn.parameters(), 'lr': static_lr},
+                {'params': self.layer1_linear.parameters(), 'lr': static_lr},
+                {'params': [self.mt_net.Z_mu], 'lr': z_lr},
+                {'params': [self.mt_net.Z_logit_s], 'lr': zls_lr}], -1
+
+    def forward(self, inputs, mu, sd, state=None):
+        batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
+        if self.init_state_noise and state is None:
+            state = torch.randn(1, batch_size, self.hidden_size1).float().to(inputs.device)
+        elif state is None:
+            state = torch.zeros(1, batch_size, self.hidden_size1).float().to(inputs.device)
+
+        hiddens, state = self.layer1_rnn(inputs, state)
+        intermediate = self.layer1_linear(hiddens)
+        yhats = self.mt_net(intermediate, mu, sd)
+
+        return yhats
+
+
+    def get_batch(self, data_iterator):
+        return _get_batch(data_iterator, self.batch_size)
+
+
+class MTModule(nn.Module):
+    """Multi-task Latent-to-sequence model for human motion prediction"""
+
+    def __init__(self,
+                 target_seq_len,
                  rnn_decoder_size,
                  batch_size,
                  total_num_batches,
@@ -47,7 +147,7 @@ class MTGRU(nn.Module):
             as is typically the case when taking the modelled root-feet joints as input, only the first input_dim
             outputs are affected.
         """
-        super(MTGRU, self).__init__()
+        super(MTModule, self).__init__()
 
         self.HUMAN_SIZE = output_dim
         self.input_size = input_dim
@@ -59,9 +159,10 @@ class MTGRU(nn.Module):
         self.init_state_noise = init_state_noise
         self.k = k
 
-        print("Input size is %d" % self.input_size)
-        print('latent_size = {0}'.format(k))
-        print('decoder_state_size = {0}'.format(rnn_decoder_size))
+        print("~~~~ MT Module ~~~~")
+        print('hidden state size = {0}'.format(rnn_decoder_size))
+        print('hierarchical latent size = {0}'.format(k))
+        print('layer 2 output size = {0}'.format(self.HUMAN_SIZE))
 
         # Posterior params
         self.Z_mu = Parameter(torch.randn(total_num_batches, k) * 0.01).float()
@@ -76,38 +177,15 @@ class MTGRU(nn.Module):
             torch.nn.Linear(n_psi_lowrank, n_psi_pars)
         )
         # open GRU Decoder forget gate
-        half_dec_size = self.decoder_size // 2
-        self.psi_decoder[3].bias.data[half_dec_size:2 * half_dec_size] += torch.ones_like(
-            self.psi_decoder[3].bias.data[half_dec_size:2 * half_dec_size]) * 1.5
-
-        # static GRU
-        self.rnn2 = nn.GRU(self.input_size, half_dec_size, batch_first=True)
-        self.gru2_C = Parameter(torch.ones(half_dec_size, self.HUMAN_SIZE)).float()
-        self.gru2_d = Parameter(torch.zeros(self.HUMAN_SIZE)).float()
-
-        if self.residual_output:
-            self.gru2_D = Parameter(torch.zeros(self.input_size, max(0, self.HUMAN_SIZE - self.input_size))).float()
-        else:
-            self.gru2_D = Parameter(torch.zeros(self.input_size, self.HUMAN_SIZE)).float()
-
-        self.init_weights((self.gru2_C, self.gru2_D))
-
-    def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
-        if zls_lr is None:
-            zls_lr = z_lr
-
-        return [{'params': self.psi_decoder.parameters(), 'lr': mt_lr},
-                {'params': self.rnn2.parameters(), 'lr': static_lr},
-                {'params': [self.gru2_C, self.gru2_D, self.gru2_d], 'lr': static_lr},
-                {'params': [self.Z_mu], 'lr': z_lr},
-                {'params': [self.Z_logit_s], 'lr': zls_lr}], -1
+        self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size] += torch.ones_like(
+            self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size]) * 1.5
 
     def _decoder_par_shape(self):
-        half_dec_size = self.decoder_size // 2
-        Whh = (half_dec_size, half_dec_size * 3)
-        bh = (half_dec_size * 3,)
-        Wih = (self.input_size, half_dec_size * 3)
-        C = (self.decoder_size // 2, self.HUMAN_SIZE)
+        hidden_size = self.decoder_size
+        Whh = (hidden_size, hidden_size * 3)
+        bh = (hidden_size * 3,)
+        Wih = (self.input_size, hidden_size * 3)
+        C = (hidden_size, self.HUMAN_SIZE)
         d = self.HUMAN_SIZE
         if self.residual_output:
             D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
@@ -128,20 +206,12 @@ class MTGRU(nn.Module):
         slices = self._decoder_par_slice()
         return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
 
-    @staticmethod
-    def init_weights(pars):
-        for p in pars:
-            if p.data.ndimension() >= 2:
-                nn.init.xavier_uniform_(p.data)
-            else:
-                nn.init.zeros_(p.data)
-
     def forward(self, inputs, mu, sd, state=None):
         batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise and state is None:
-            state = torch.randn(batch_size, self.decoder_size // 2).float().to(inputs.device)
+            state = torch.randn(batch_size, self.decoder_size).float().to(inputs.device)
         elif state is None:
-            state = torch.zeros(batch_size, self.decoder_size // 2).to(inputs.device)
+            state = torch.zeros(batch_size, self.decoder_size).to(inputs.device)
 
         # Sample from (pseudo-)posterior
         eps = torch.randn_like(sd)
@@ -171,18 +241,10 @@ class MTGRU(nn.Module):
             # states.append(dec[-1, :].unsqueeze(0).detach())
             yhats.append(yhat_bb.unsqueeze(0))
 
-        seq2, state2 = self.rnn2(inputs)
-        yhats2 = seq2 @ self.gru2_C + self.gru2_d
-
-        if self.residual_output:
-            yhats2 = yhats2 + torch.cat((inputs[:, :, :self.HUMAN_SIZE], inputs @ self.gru2_D), 2)
-        else:
-            yhats2 = yhats2 + inputs @ self.gru2_D
-
         yhats1 = torch.cat(yhats, dim=0)
         # states = torch.cat(states, dim=0)
 
-        return yhats1 + yhats2  #, states
+        return yhats1
 
     def mutable_GRU(self,
                     x: torch.Tensor,
@@ -192,9 +254,9 @@ class MTGRU(nn.Module):
                     init_states: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         seq_sz, d = x.size()
         hidden_seq = []
-        h_t = torch.zeros(self.decoder_size // 2).to(x.device) if init_states is None else init_states
+        h_t = torch.zeros(self.decoder_size).to(x.device) if init_states is None else init_states
 
-        HS = self.decoder_size // 2
+        HS = self.decoder_size
         _ixr, _ixz, _ixn = slice(0, HS), slice(HS, 2 * HS), slice(2 * HS, 3 * HS)
 
         for t in range(seq_sz):
@@ -211,9 +273,6 @@ class MTGRU(nn.Module):
 
         hidden_seq = torch.cat(hidden_seq, dim=0)
         return hidden_seq    # hidden state is simply hidden_seq[-1,:] so no need to return explicitly
-
-    def get_batch(self, data_iterator):
-        return _get_batch(data_iterator, self.batch_size)
 
 
 class OpenLoopGRU(nn.Module):

@@ -40,7 +40,11 @@ def parse_args(args=None):
     parser.add_argument('--no_residual_velocities', dest='residual_velocities',
                         help='Add a residual connection that effectively models velocities', action='store_false')
     parser.add_argument('--decoder_size', dest='decoder_size',
-                        help='Size of decoder recurrent state.', type=int)
+                        help='Size of (layer 1) decoder recurrent state.', type=int)
+    parser.add_argument('--decoder_size2', dest='decoder_size2',
+                        help='Size of layer 2 decoder recurrent state.', type=int)
+    parser.add_argument('--bottleneck', dest='bottleneck',
+                        help='Size of the connection between 1st and 2nd layer.', type=int)
     parser.add_argument('--encoder_size', dest='encoder_size',
                         help='Size of encoder recurrent state.', type=int)
     parser.add_argument('--size_psi_hidden', dest='size_psi_hidden',
@@ -68,7 +72,7 @@ def parse_args(args=None):
     parser.add_argument('--train_dir', dest='train_dir', help='Training directory', type=str)
     parser.add_argument('--use_cpu', dest='use_cpu', help='', action='store_true')
     parser.add_argument('--load', dest='load', help='Filepath. Try to load a previous checkpoint.', type=str)
-    parser.add_argument('--load_gru2', dest='load_gru2', help='Filepath. Load a k=0 checkpoint to gru2' +
+    parser.add_argument('--load_layer1', dest='load_layer1', help='Filepath. Load a k=0 checkpoint to layer 1' +
                         ' for a k > 0 MT model.', type=str)
     parser.add_argument('--sample', dest='sample', help='Set to True for sampling.', action='store_true')
     parser.add_argument('--input_fname', dest='input_fname', type=str, help="name of input file")
@@ -116,10 +120,10 @@ def parse_args(args=None):
     # relevant argument checks
     assert configdict["decoder_size"] % 2 == 0, "decoder size must be divisible by 2."   # since div by 2 for MT model
     assert configdict["dropout_p"] == 0.0, "dropout not implemented yet."
-    assert not (len(configdict["load_gru2"]) > 0 and configdict["k"] == 0), \
-        "load_gru2 only available for MT models (k>0)."
-    assert not (len(configdict["load_gru2"]) > 0 and len(configdict["load"]) > 0), \
-        "Only one of 'load' and 'load_gru2' arguments may be supplied."
+    assert not (len(configdict["load_layer1"]) > 0 and configdict["k"] == 0), \
+        "load_layer1 only available for MT models (k>0)."
+    assert not (len(configdict["load_layer1"]) > 0 and len(configdict["load"]) > 0), \
+        "Only one of 'load' and 'load_layer1' arguments may be supplied."
 
     return _dictNamespace(configdict)
 
