@@ -275,6 +275,127 @@ class MTModule(nn.Module):
         return hidden_seq    # hidden state is simply hidden_seq[-1,:] so no need to return explicitly
 
 
+class MTModule_iid(nn.Module):
+    """Multi-task Latent-to-sequence model for human motion prediction"""
+
+    def __init__(self,
+                 target_seq_len,
+                 hidden_size,
+                 batch_size,
+                 total_num_batches,
+                 k,
+                 n_psi_hidden,
+                 n_psi_lowrank,
+                 output_dim=64,
+                 input_dim=0,
+                 dropout=0.0,
+                 residual_output=True,
+                 init_state_noise=False):
+        """Create the model.
+
+        Args:
+          target_seq_len: length of the target sequence.
+          rnn_decoder_size: number of units in the rnn.
+          rnn_encoder_size: number of units in the MT encoder rnn.
+          batch_size: the size of the batches used during the forward pass.
+          k: the size of the Multi-Task latent space.
+          n_psi_hidden: the size of the nonlinear hidden layer for generating parameters psi.
+          n_psi_lowrank: the size of the linear subspace in which psi lives (to reduce par count).
+          output_dim: instantaneous dimension of output (size of vector emitted at each time t).
+          input_dim: size of each input vector at each time t.
+          dropout: probability of dropout used for encoding.
+          residual_output: passes the inputs directly to output via residual connection. If the output dim > input dim
+            as is typically the case when taking the modelled root-feet joints as input, only the first input_dim
+            outputs are affected.
+        """
+        super(MTModule_iid, self).__init__()
+
+        assert init_state_noise is False, "iid MTModule does not support state noise"
+        self.HUMAN_SIZE = output_dim
+        self.input_size = input_dim
+        self.target_seq_len = target_seq_len
+        self.decoder_size = hidden_size
+        self.batch_size = batch_size
+        self.dropout = dropout
+        self.residual_output = residual_output
+        self.k = k
+
+        print("~~~~ iid MT Module ~~~~")
+        print('hidden state size = {0}'.format(hidden_size))
+        print('hierarchical latent size = {0}'.format(k))
+        print('layer 2 output size = {0}'.format(self.HUMAN_SIZE))
+
+        # Posterior params
+        self.Z_mu = Parameter(torch.randn(total_num_batches, k) * 0.01).float()
+        self.Z_logit_s = Parameter(torch.ones(total_num_batches, k) * -1.76).float()      # \approx 0.005 std
+
+        # Psi Decoder weights
+        n_psi_pars = sum(self._decoder_par_size())
+        self.psi_decoder = torch.nn.Sequential(
+            torch.nn.Linear(k, n_psi_hidden),
+            torch.nn.Tanh(),
+            torch.nn.Linear(n_psi_hidden, n_psi_lowrank),
+            torch.nn.Linear(n_psi_lowrank, n_psi_pars)
+        )
+
+    def _decoder_par_shape(self):
+        hidden_size = self.decoder_size
+        C = (hidden_size, self.HUMAN_SIZE)
+        d = self.HUMAN_SIZE
+        if self.residual_output:
+            D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
+        else:
+            D = (self.input_size, self.HUMAN_SIZE)
+        return C, D, d
+
+    def _decoder_par_size(self):
+        return [np.prod(x) for x in self._decoder_par_shape()]
+
+    def _decoder_par_slice(self):
+        sizes = self._decoder_par_size()
+        csizes = np.cumsum(np.hstack((np.zeros((1,), int), sizes)))
+        return [slice(csizes[i], csizes[i+1]) for i in range(len(sizes))]
+
+    def _decoder_par_reshape(self, psi):
+        shapes = self._decoder_par_shape()
+        slices = self._decoder_par_slice()
+        return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
+
+    def forward(self, hiddens, inputs, mu, sd):
+
+        # Sample from (pseudo-)posterior
+        eps = torch.randn_like(sd)
+        z = mu + eps * sd
+
+        # generate sequence from z
+        yhats = self.forward_given_z(hiddens, inputs, z)
+
+        return yhats
+
+    def forward_given_z(self, hiddens, inputs, z):
+        batchsize = inputs.shape[0]
+
+        # Decode from sampled z
+        psi = self.psi_decoder(z)
+
+        # can't run decoder in batch, since each index has its own parameters
+        yhats = []
+        # states = []
+        for bb in range(batchsize):
+            C, D, d = self._decoder_par_reshape(psi[bb, :])
+            if self.residual_output:
+                yhat_bb = hiddens[bb,:,:] @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1) + d
+            else:
+                yhat_bb = hiddens[bb,:,:] @ C + inputs[bb, :, :] @ D + d
+            # states.append(dec[-1, :].unsqueeze(0).detach())
+            yhats.append(yhat_bb.unsqueeze(0))
+
+        yhats1 = torch.cat(yhats, dim=0)
+        # states = torch.cat(states, dim=0)
+
+        return yhats1
+
+
 class OpenLoopGRU(nn.Module):
     """Non MT version of the MT model for human motion prediction. Prediction is open loop."""
 
@@ -391,96 +512,51 @@ class DynamicsDict(nn.Module):
         print('latent_size = {0}'.format(k))
         print('decoder_state_size = {0}'.format(rnn_decoder_size))
 
-        # Encoder weights
-        self.Z_mu = Parameter(torch.randn(total_num_batches, k) * 0.01).float()
-        self.Z_logit_s = Parameter(torch.ones(total_num_batches, k) * -1.76).float()  # \approx 0.005 std
-
-        # Psi Decoder weights
-        n_psi_pars = sum(self._decoder_par_size())
-        self.psi_decoder = torch.nn.Sequential(
-            torch.nn.Linear(k, n_psi_hidden),
-            torch.nn.Tanh(),
-            torch.nn.Linear(n_psi_hidden, n_psi_lowrank),
-            torch.nn.Linear(n_psi_lowrank, n_psi_pars)
-        )
+        self.mt_net = MTModule_iid(
+            target_seq_len,
+            rnn_decoder_size,
+            batch_size,
+            total_num_batches,
+            k,
+            n_psi_hidden,
+            n_psi_lowrank,
+            output_dim=output_dim,
+            input_dim=input_dim,
+            dropout=dropout,
+            residual_output=residual_output,
+            init_state_noise=False)
 
         # GRU Decoder static weights (all except direct recurrent)
-        self.decoder = nn.GRU(self.input_size, rnn_decoder_size, batch_first=True)
+        self.rnn = nn.GRU(self.input_size, rnn_decoder_size, batch_first=True)
 
     def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
         if zls_lr is None:
             zls_lr = z_lr
 
-        return [{'params': self.psi_decoder.parameters(), 'lr': mt_lr},
-                {'params': self.decoder.parameters(), 'lr': static_lr},
-                {'params': [self.Z_mu], 'lr': z_lr},
-                {'params': [self.Z_logit_s], 'lr': zls_lr}], -1
-
-    def _decoder_par_shape(self):
-        C = (self.decoder_size, self.HUMAN_SIZE)
-        d = self.HUMAN_SIZE
-        if self.residual_output:
-            D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
-        else:
-            D = (self.input_size, self.HUMAN_SIZE)
-        return C, D, d
-
-    def _decoder_par_size(self):
-        return [np.prod(x) for x in self._decoder_par_shape()]
-
-    def _decoder_par_slice(self):
-        sizes = self._decoder_par_size()
-        csizes = np.cumsum(np.hstack((np.zeros((1,), int), sizes)))
-        return [slice(csizes[i], csizes[i+1]) for i in range(len(sizes))]
-
-    def _decoder_par_reshape(self, psi):
-        shapes = self._decoder_par_shape()
-        slices = self._decoder_par_slice()
-        return [psi[slice].reshape(shape) for shape, slice in zip(shapes, slices)]
+        return [{'params': self.mt_net.psi_decoder.parameters(), 'lr': mt_lr},
+                {'params': self.rnn.parameters(), 'lr': static_lr},
+                {'params': [self.mt_net.Z_mu], 'lr': z_lr},
+                {'params': [self.mt_net.Z_logit_s], 'lr': zls_lr}], -1
 
     def forward(self, inputs, mu, sd, state=None):
         batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
         if self.init_state_noise and state is None:
             state = torch.randn(1, batch_size, self.decoder_size).float().to(inputs.device)
 
-        # Sample from (pseudo-)posterior
-        eps = torch.randn_like(sd)
-        z = mu + eps * sd
+        dec, state = self.rnn(inputs, state)
 
-        # generate sequence from z
-        yhats, states = self.forward_given_z(inputs, z, state)
+        yhats = self.mt_net(dec, inputs, mu, sd)
 
-        return yhats, states
+        return yhats
 
-    def encode(self, outputs):
-        # Encode current sequence(s) => latent space
-        # outputs = torch.transpose(outputs, 0, 1)
-        seq, enc_state = self.encoder(outputs)
-
-        enc_state = enc_state[0, :, :]  # remove unnecessary first dim (=1)
-        mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
-        return mu, logstd
-
-    def forward_given_z(self, inputs, z, state):
-        batchsize = inputs.shape[0]
-
-        # Decode from sampled z
-        psi = self.psi_decoder(z)
-
-        dec, state = self.decoder(inputs, state)
-
-        #could run this in batch for efficiency but I'm feeling lazy right now.
-        yhats = []
-        for bb in range(batchsize):
-            C, D, d = self._decoder_par_reshape(psi[bb, :])
-            if self.residual_output:
-                yhat_bb = dec[bb,:,:] @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1) + d
-            else:
-                yhat_bb = dec[bb,:,:] @ C + inputs[bb, :, :] @ D + d
-            yhats.append(yhat_bb.unsqueeze(0))
-
-        yhats = torch.cat(yhats, dim=0)
-        return yhats, None
+    # def encode(self, outputs):
+    #     # Encode current sequence(s) => latent space
+    #     # outputs = torch.transpose(outputs, 0, 1)
+    #     seq, enc_state = self.encoder(outputs)
+    #
+    #     enc_state = enc_state[0, :, :]  # remove unnecessary first dim (=1)
+    #     mu, logstd = enc_state @ self.to_mu, enc_state @ self.to_lsigma + self.to_lsigma_bias
+    #     return mu, logstd
 
     def get_batch(self, data_iterator):
         return _get_batch(data_iterator, self.batch_size)
