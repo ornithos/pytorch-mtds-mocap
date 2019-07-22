@@ -235,7 +235,7 @@ class MTModule(nn.Module):
             Whh, bh, Wih, C, D, d = self._decoder_par_reshape(psi[bb, :])
             dec = self.mutable_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
             if self.residual_output:
-                yhat_bb = dec @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1)
+                yhat_bb = dec @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1) + d
             else:
                 yhat_bb = dec @ C + inputs[bb, :, :] @ D + d
             # states.append(dec[-1, :].unsqueeze(0).detach())
