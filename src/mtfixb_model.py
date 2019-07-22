@@ -237,7 +237,7 @@ class MTModule(nn.Module):
             if self.residual_output:
                 yhat_bb = dec @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1)
             else:
-                yhat_bb = dec @ C + inputs[bb, :, :] @ D
+                yhat_bb = dec @ C + inputs[bb, :, :] @ D + d
             # states.append(dec[-1, :].unsqueeze(0).detach())
             yhats.append(yhat_bb.unsqueeze(0))
 
@@ -418,11 +418,12 @@ class DynamicsDict(nn.Module):
 
     def _decoder_par_shape(self):
         C = (self.decoder_size, self.HUMAN_SIZE)
+        d = self.HUMAN_SIZE
         if self.residual_output:
             D = (self.input_size, max(0, self.HUMAN_SIZE - self.input_size))
         else:
             D = (self.input_size, self.HUMAN_SIZE)
-        return C, D
+        return C, D, d
 
     def _decoder_par_size(self):
         return [np.prod(x) for x in self._decoder_par_shape()]
@@ -471,11 +472,11 @@ class DynamicsDict(nn.Module):
         #could run this in batch for efficiency but I'm feeling lazy right now.
         yhats = []
         for bb in range(batchsize):
-            C, D = self._decoder_par_reshape(psi[bb, :])
+            C, D, d = self._decoder_par_reshape(psi[bb, :])
             if self.residual_output:
-                yhat_bb = dec[bb,:,:] @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1)
+                yhat_bb = dec[bb,:,:] @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1) + d
             else:
-                yhat_bb = dec[bb,:,:] @ C + inputs[bb, :, :] @ D
+                yhat_bb = dec[bb,:,:] @ C + inputs[bb, :, :] @ D + d
             yhats.append(yhat_bb.unsqueeze(0))
 
         yhats = torch.cat(yhats, dim=0)
