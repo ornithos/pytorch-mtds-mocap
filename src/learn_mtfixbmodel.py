@@ -32,11 +32,12 @@ def create_model(args, total_num_batches):
         args.size_psi_hidden,
         args.size_psi_lowrank,
         args.bottleneck,
-        args.human_size,
-        args.input_size,
-        args.dropout_p,
-        args.residual_velocities,
-        args.init_state_noise)
+        output_dim=args.human_size,
+        input_dim=args.input_size,
+        dropout=args.dropout_p,
+        residual_output=args.residual_velocities,
+        init_state_noise=args.init_state_noise,
+        mt_rnn=args.mt_rnn)
 
     if len(args.load) <= 0:
         if len(args.load_layer1) > 0:

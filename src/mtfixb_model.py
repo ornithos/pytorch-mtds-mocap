@@ -31,7 +31,8 @@ class MTGRU(nn.Module):
                  input_dim=0,
                  dropout=0.0,
                  residual_output=True,
-                 init_state_noise=False):
+                 init_state_noise=False,
+                 mt_rnn=False):
         """Create the model.
 
         Args:
@@ -62,6 +63,7 @@ class MTGRU(nn.Module):
         self.residual_output = residual_output
         self.init_state_noise = init_state_noise
         self.k = k
+        self.mt_vanilla_rnn = mt_rnn
 
         print("==== MTGRU ====")
         print("Input size is %d" % self.input_size)
@@ -80,7 +82,8 @@ class MTGRU(nn.Module):
             input_dim=self.interlayer_dim,
             dropout=dropout,
             residual_output=residual_output,
-            init_state_noise=init_state_noise)
+            init_state_noise=init_state_noise,
+            is_gru=True if not self.mt_vanilla_rnn else False)
 
         # Layer 1 GRU
         self.layer1_rnn = nn.GRU(self.input_size, hidden_size1, batch_first=True)
@@ -133,7 +136,8 @@ class MTModule(nn.Module):
                  input_dim=0,
                  dropout=0.0,
                  residual_output=True,
-                 init_state_noise=False):
+                 init_state_noise=False,
+                 is_gru=True):
         """Create the model.
 
         Args:
@@ -162,6 +166,7 @@ class MTModule(nn.Module):
         self.residual_output = residual_output
         self.init_state_noise = init_state_noise
         self.k = k
+        self.is_gru = is_gru
 
         print("~~~~ MT Module ~~~~")
         print('hidden state size = {0}'.format(rnn_decoder_size))
@@ -181,14 +186,16 @@ class MTModule(nn.Module):
             torch.nn.Linear(n_psi_lowrank, n_psi_pars)
         )
         # open GRU Decoder forget gate
-        self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size] += torch.ones_like(
-            self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size]) * 1.5
+        if self.is_gru:
+            self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size] += torch.ones_like(
+                self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size]) * 1.5
 
     def _decoder_par_shape(self):
         hidden_size = self.decoder_size
-        Whh = (hidden_size, hidden_size * 3)
-        bh = (hidden_size * 3,)
-        Wih = (self.input_size, hidden_size * 3)
+        hidden_stack = hidden_size * 3 if self.is_gru else hidden_size
+        Whh = (hidden_size, hidden_stack)
+        bh = (hidden_stack,)
+        Wih = (self.input_size, hidden_stack)
         C = (hidden_size, self.HUMAN_SIZE)
         d = self.HUMAN_SIZE
         if self.residual_output:
@@ -237,7 +244,11 @@ class MTModule(nn.Module):
         states = []
         for bb in range(batchsize):
             Whh, bh, Wih, C, D, d = self._decoder_par_reshape(psi[bb, :])
-            dec = self.mutable_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
+            if self.is_gru:
+                dec = self.mutable_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
+            else:
+                dec = self.mutable_RNN(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
+
             if self.residual_output:
                 yhat_bb = dec @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1) + d
             else:
@@ -261,6 +272,7 @@ class MTModule(nn.Module):
         h_t = torch.zeros(self.decoder_size).to(x.device) if init_states is None else init_states
 
         HS = self.decoder_size
+
         _ixr, _ixz, _ixn = slice(0, HS), slice(HS, 2 * HS), slice(2 * HS, 3 * HS)
 
         for t in range(seq_sz):
@@ -277,6 +289,24 @@ class MTModule(nn.Module):
 
         hidden_seq = torch.cat(hidden_seq, dim=0)
         return hidden_seq    # hidden state is simply hidden_seq[-1,:] so no need to return explicitly
+
+    def mutable_RNN(self,
+                    x: torch.Tensor,
+                    Whh: torch.Tensor,
+                    Wih: torch.Tensor,
+                    bh: torch.Tensor,
+                    init_states: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        seq_sz, d = x.size()
+        hidden_seq = []
+        h_t = torch.zeros(self.decoder_size).to(x.device) if init_states is None else init_states
+        
+        for t in range(seq_sz):
+            x_t = x[t, :]
+            h_t = torch.tanh(x_t @ Wih + h_t @ Whh + bh)
+            hidden_seq.append(h_t.unsqueeze(0))
+
+        hidden_seq = torch.cat(hidden_seq, dim=0)
+        return hidden_seq  # hidden state is simply hidden_seq[-1,:] so no need to return explicitly
 
 
 class MTModule_iid(nn.Module):

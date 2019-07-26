@@ -64,6 +64,8 @@ def parse_args(args=None):
                         help='Autoregressive coefficient (default is off)', type=float)
     parser.add_argument('--dynamicsdict', dest='dynamicsdict', action="store_true",
                         help='Dynamics Dictionary Architecture')
+    parser.add_argument('--mt_rnn', dest='mt_rnn', action="store_true",
+                        help='MT module is vanilla RNN instead of GRU. (Default false.)')
     parser.add_argument('--init_state_noise', dest='init_state_noise', action="store_true",
                         help='Initialise each time series chunk state with noise (instead of 0).')
 
@@ -120,6 +122,7 @@ def parse_args(args=None):
     # relevant argument checks
     assert configdict["decoder_size"] % 2 == 0, "decoder size must be divisible by 2."   # since div by 2 for MT model
     assert configdict["dropout_p"] == 0.0, "dropout not implemented yet."
+    assert not (configdict["mt_rnn"] and configdict["dynamicsdict"]), "cannot req both MT-RNN and Dynamics Dict."
     assert not (len(configdict["load_layer1"]) > 0 and configdict["k"] == 0), \
         "load_layer1 only available for MT models (k>0)."
     assert not (len(configdict["load_layer1"]) > 0 and len(configdict["load"]) > 0), \
