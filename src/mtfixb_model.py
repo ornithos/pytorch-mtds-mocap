@@ -98,16 +98,20 @@ class MTGRU(nn.Module):
 
     def forward(self, inputs, mu, sd, state=None):
         batch_size = inputs.size(0)  # test time may have a different batch size to train (so don't use self.batch_sz)
-        if self.init_state_noise and state is None:
-            state = torch.randn(1, batch_size, self.hidden_size1).float().to(inputs.device)
+        if state is not None:
+            assert state.size(1) == self.hidden_size1 + self.hidden_size2
+            state1, state2 = state[:, :self.hidden_size1].unsqueeze(0), state[:, self.hidden_size1:]
+        elif self.init_state_noise and state is None:
+            state1, state2 = torch.randn(1, batch_size, self.hidden_size1).float().to(inputs.device), None
         elif state is None:
-            state = torch.zeros(1, batch_size, self.hidden_size1).float().to(inputs.device)
+            state1, state2 = torch.zeros(1, batch_size, self.hidden_size1).float().to(inputs.device), None
 
-        hiddens, state = self.layer1_rnn(inputs, state)
+        hiddens, state = self.layer1_rnn(inputs, state1)
         intermediate = self.layer1_linear(hiddens)
-        yhats = self.mt_net(intermediate, mu, sd)
+        yhats, mt_states = self.mt_net(intermediate, mu, sd, state2)
 
-        return yhats
+        state = state[0]   # only 1 layer so should be safe.
+        return yhats, torch.cat((state, mt_states), dim=1)
 
 
     def get_batch(self, data_iterator):
@@ -218,9 +222,9 @@ class MTModule(nn.Module):
         z = mu + eps * sd
 
         # generate sequence from z
-        yhats = self.forward_given_z(inputs, z, state)
+        yhats, states = self.forward_given_z(inputs, z, state)
 
-        return yhats
+        return yhats, states
 
     def forward_given_z(self, inputs, z, state):
         batchsize = inputs.shape[0]
@@ -230,7 +234,7 @@ class MTModule(nn.Module):
 
         # can't run decoder in batch, since each index has its own parameters
         yhats = []
-        # states = []
+        states = []
         for bb in range(batchsize):
             Whh, bh, Wih, C, D, d = self._decoder_par_reshape(psi[bb, :])
             dec = self.mutable_GRU(inputs[bb, :, :], Whh, Wih, bh, state[bb, :])
@@ -238,13 +242,13 @@ class MTModule(nn.Module):
                 yhat_bb = dec @ C + torch.cat((inputs[bb, :, :self.HUMAN_SIZE], inputs[bb, :, :] @ D), 1) + d
             else:
                 yhat_bb = dec @ C + inputs[bb, :, :] @ D + d
-            # states.append(dec[-1, :].unsqueeze(0).detach())
+            states.append(dec[-1, :].unsqueeze(0).detach())
             yhats.append(yhat_bb.unsqueeze(0))
 
         yhats1 = torch.cat(yhats, dim=0)
-        # states = torch.cat(states, dim=0)
+        states = torch.cat(states, dim=0)
 
-        return yhats1
+        return yhats1, states
 
     def mutable_GRU(self,
                     x: torch.Tensor,
@@ -456,7 +460,7 @@ class OpenLoopGRU(nn.Module):
                                                                self.HUMAN_SIZE - self.input_size).to(inputs.device)), 2)
             else:
                 yhats = yhats + inputs[:, :, :self.HUMAN_SIZE]
-        return yhats
+        return yhats, state
 
     def get_batch(self, data_iterator):
         return _get_batch(data_iterator, self.batch_size)
@@ -547,7 +551,7 @@ class DynamicsDict(nn.Module):
 
         yhats = self.mt_net(dec, inputs, mu, sd)
 
-        return yhats
+        return yhats, state
 
     # def encode(self, outputs):
     #     # Encode current sequence(s) => latent space

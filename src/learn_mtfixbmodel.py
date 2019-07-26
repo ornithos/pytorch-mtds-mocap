@@ -151,9 +151,9 @@ def train(args):
         if is_MT:
             mu = model.mt_net.Z_mu[c_ids, :]
             sd = torch.sigmoid(3 * model.mt_net.Z_logit_s[c_ids, :])
-            preds = model(inputs, mu, sd)
+            preds, _state = model(inputs, mu, sd)
         else:
-            preds = model(inputs)
+            preds, _state = model(inputs)
 
         err = (preds - outputs)
         if has_weight:
