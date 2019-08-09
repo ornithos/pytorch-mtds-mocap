@@ -81,13 +81,15 @@ class MTGRU(nn.Module):
             output_dim=output_dim,
             input_dim=self.interlayer_dim,
             dropout=dropout,
-            residual_output=residual_output,
+            residual_output=False,
             init_state_noise=init_state_noise,
             is_gru=True if not self.mt_vanilla_rnn else False)
 
         # Layer 1 GRU
         self.layer1_rnn = nn.GRU(self.input_size, hidden_size1, batch_first=True)
         self.layer1_linear = nn.Linear(self.hidden_size1, self.interlayer_dim)
+        if residual_output:
+            self.skip_connection = nn.Linear(self.hidden_size1, output_dim)
 
     def get_params_optim_dicts(self, mt_lr, static_lr, z_lr, zls_lr=None):
         if zls_lr is None:
@@ -112,6 +114,8 @@ class MTGRU(nn.Module):
         hiddens, state = self.layer1_rnn(inputs, state1)
         intermediate = self.layer1_linear(hiddens)
         yhats, mt_states = self.mt_net(intermediate, mu, sd, state2)
+        if self.residual_output:
+            yhats = yhats + self.skip_connection(hiddens)
 
         state = state[0]   # only 1 layer so should be safe.
         return yhats, torch.cat((state, mt_states), dim=1)
@@ -299,7 +303,7 @@ class MTModule(nn.Module):
         seq_sz, d = x.size()
         hidden_seq = []
         h_t = torch.zeros(self.decoder_size).to(x.device) if init_states is None else init_states
-        
+
         for t in range(seq_sz):
             x_t = x[t, :]
             h_t = torch.tanh(x_t @ Wih + h_t @ Whh + bh)
