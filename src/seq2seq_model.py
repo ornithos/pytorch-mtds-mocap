@@ -63,7 +63,7 @@ class Seq2SeqModel(nn.Module):
     """
     super(Seq2SeqModel, self).__init__()
 
-    self.HUMAN_SIZE = 64
+    self.HUMAN_SIZE = 67
     self.input_size = self.HUMAN_SIZE + num_traj + (number_of_actions if one_hot else 0)
 
     print( "One hot is ", one_hot )
@@ -162,6 +162,7 @@ class Seq2SeqModel(nn.Module):
 
       # Get the number of frames
       n = data_Y[ the_key ].shape[0]
+      assert n > total_frames, "n of file {:s} too small.".format(the_key)
 
       # Sample somewherein the middle
       idx = np.random.randint( 1, n-total_frames )

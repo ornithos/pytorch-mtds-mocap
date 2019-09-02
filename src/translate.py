@@ -132,7 +132,7 @@ def create_model(actions, sampling=False):
       not args.omit_one_hot,
       args.residual_velocities,
       dtype=torch.float32,
-      num_traj=44)
+      num_traj=35)
 
   if len(args.load) <= 0:
     return model
@@ -163,7 +163,7 @@ def train():
 
     current_step = 0
     if len(args.load) > 0:
-        Exception("Training from load file no longer supported in this fork.")
+        Exception("Training from load file not supported in this file.")
 
     previous_losses = []
 
@@ -243,8 +243,7 @@ def train():
 
         print()
         print("{0: <16} |".format("milliseconds"), end="")
-        for ms in [80, 320, 640, 1000, 1520, 2000, 2520]:
-          print(" {0:5d} |".format(ms), end="")
+        print((" {:5d} |"*7).format(*[80, 320, 640, 1000, 1520, 2000, 2520]))
         print()
 
         mean_loss = step_loss.detach().cpu().mean(dim=0).numpy()
@@ -429,21 +428,40 @@ def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
   print ("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
            seq_length_in, seq_length_out))
 
+  pct_train = 0.875
   style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
-  train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1,9) if i != style_ix])
-  train_set_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps.npz"))
-  train_set_U = np.load(os.path.join(data_dir, "edin_Us_30fps.npz"))
-  train_set_Y = [train_set_Y[str(i)] for i in train_ixs]
-  train_set_U = [train_set_U[str(i)] for i in train_ixs]
+  style_ixs = set(range(1, 9)) - {style_ix}
 
-  test_set_Y = np.load(os.path.join(data_dir, "test_input_{0}_y.npz".format(style_ix)))
-  test_set_U = np.load(os.path.join(data_dir, "test_input_{0}_u.npz".format(style_ix)))
-  test_set_Y = [test_set_Y[str(i+1)] for i in range(len(test_set_Y))]
-  test_set_U = [test_set_U[str(i+1)] for i in range(len(test_set_U))]
+  load_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps_final.npz"))
+  load_U = np.load(os.path.join(data_dir, "edin_Us_30fps_final.npz"))
+
+  train_ix_end = np.floor([sum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) * pct_train for j in style_ixs])
+  train_ix_end = train_ix_end.astype('int')
+  train_len_cum = [np.cumsum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) for j in style_ixs]
+
+  train_set_Y, train_set_U, valid_set_Y, valid_set_U = [], [], [], []
+  for j, e, cumsumlens in zip(style_ixs, train_ix_end, train_len_cum):
+      found_breakpt = False
+      cum_prv = 0
+      for i, cuml in enumerate(cumsumlens):
+          load_ix = str(style_lkp[str(j)][i])
+          if cuml < e:
+              train_set_Y.append(load_Y[load_ix])
+              train_set_U.append(load_U[load_ix])
+              cum_prv = cuml
+          elif not found_breakpt:
+              train_set_Y.append(load_Y[load_ix][:e - cum_prv, :])
+              train_set_U.append(load_U[load_ix][:e - cum_prv, :])
+              valid_set_Y.append(load_Y[load_ix][e - cum_prv:, :])
+              valid_set_U.append(load_U[load_ix][e - cum_prv:, :])
+              found_breakpt = True
+          else:
+              valid_set_Y.append(load_Y[load_ix])
+              valid_set_U.append(load_U[load_ix])
 
   print("done reading data.")
 
-  return train_set_Y, train_set_U, test_set_Y, test_set_U
+  return train_set_Y, train_set_U, valid_set_Y, valid_set_U
 
 
 def main():
