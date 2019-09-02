@@ -131,8 +131,7 @@ class Seq2SeqModel(nn.Module):
     outputs = torch.cat(outputs, 0)
     return torch.transpose(outputs, 0, 1)
 
-
-  def get_batch( self, data_Y, data_U, actions ):
+  def get_batch(self, data_Y, data_U, actions, stratify=False):
     """Get a random batch of data from the specified bucket, prepare for step.
 
     Args
@@ -144,9 +143,14 @@ class Seq2SeqModel(nn.Module):
     """
 
     # Select entries at random
-    probs    = np.array([y.shape[0] for y in data_Y])
-    probs    = probs / probs.sum()
-    chosen_keys = np.random.choice( len(data_Y), self.batch_size, p=probs)
+    probs = np.array([y.shape[0] for y in data_Y])
+    probs = probs / probs.sum()
+    if not stratify:
+      chosen_keys = np.random.choice(len(data_Y), self.batch_size, p=probs)
+      bsz = self.batch_size
+    else:
+      bsz = len(data_Y)
+      chosen_keys = list(range(bsz))
 
     # How many frames in total do we need?
     total_frames = self.source_seq_len + self.target_seq_len
@@ -156,7 +160,7 @@ class Seq2SeqModel(nn.Module):
     decoder_inputs  = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
     decoder_outputs = np.zeros((self.batch_size, self.target_seq_len, self.HUMAN_SIZE), dtype=float)
 
-    for i in xrange( self.batch_size ):
+    for i in xrange( bsz ):
 
       the_key = chosen_keys[i]
 
