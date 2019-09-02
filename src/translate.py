@@ -5,17 +5,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import math
 import os
-import random
 import sys
 import time
-import h5py
 
 import numpy as np
-from six.moves import xrange # pylint: disable=redefined-builtin
 
-import data_utils
+from __trash__ import data_utils
 import seq2seq_model
 import torch
 import torch.optim as optim
@@ -314,12 +310,12 @@ def get_srnn_gts( actions, model, test_set, data_mean, data_std, dim_to_ignore, 
 
     # expmap -> rotmat -> euler
     for i in np.arange( srnn_expmap.shape[0] ):
-      denormed = data_utils.unNormalizeData(srnn_expmap[i,:,:], data_mean, data_std, dim_to_ignore, actions, one_hot )
+      denormed = data_utils.unNormalizeData(srnn_expmap[i, :, :], data_mean, data_std, dim_to_ignore, actions, one_hot)
 
       if to_euler:
         for j in np.arange( denormed.shape[0] ):
           for k in np.arange(3,97,3):
-            denormed[j,k:k+3] = data_utils.rotmat2euler( data_utils.expmap2rotmat( denormed[j,k:k+3] ))
+            denormed[j,k:k+3] = data_utils.rotmat2euler(data_utils.expmap2rotmat(denormed[j, k:k + 3]))
 
       srnn_gt_euler.append( denormed );
 

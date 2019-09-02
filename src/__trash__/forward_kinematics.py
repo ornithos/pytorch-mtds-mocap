@@ -2,14 +2,10 @@ from __future__ import division
 
 import numpy as np
 import h5py
-import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from mpl_toolkits.mplot3d import Axes3D
-import viz
-import time
 import copy
-import data_utils
+from __trash__ import data_utils, viz
+
 
 def fkl( angles, parent, offset, rotInd, expmapInd ):
   """
@@ -85,7 +81,7 @@ def revert_coordinate_space(channels, R0, T0):
 
   # Loop through the passed posses
   for ii in range(n):
-    R_diff = data_utils.expmap2rotmat( channels[ii, rootRotInd] )
+    R_diff = data_utils.expmap2rotmat(channels[ii, rootRotInd])
     R = R_diff.dot( R_prev )
 
     channels_rec[ii, rootRotInd] = data_utils.rotmat2expmap(R)

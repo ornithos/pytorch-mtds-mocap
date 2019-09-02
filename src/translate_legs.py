@@ -4,17 +4,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import math
 import os
-import random
 import sys
 import time
-import h5py
 
 import numpy as np
-from six.moves import xrange  # pylint: disable=redefined-builtin
 
-import data_utils
+from __trash__ import data_utils
 import seq2seq_model
 import torch
 import torch.optim as optim

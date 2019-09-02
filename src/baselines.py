@@ -6,11 +6,10 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
 
 import translate
-import data_utils
+from __trash__ import data_utils
 import seq2seq_model
 
 
@@ -102,11 +101,11 @@ def denormalize_and_convert_to_euler( data, data_mean, data_std, dim_to_ignore, 
 
   # expmap -> rotmat -> euler
   for i in np.arange( data.shape[0] ):
-    denormed = data_utils.unNormalizeData(data[i,:,:], data_mean, data_std, dim_to_ignore, actions, one_hot )
+    denormed = data_utils.unNormalizeData(data[i, :, :], data_mean, data_std, dim_to_ignore, actions, one_hot)
 
     for j in np.arange( denormed.shape[0] ):
       for k in np.arange(3,97,3):
-        denormed[j,k:k+3] = data_utils.rotmat2euler( data_utils.expmap2rotmat( denormed[j,k:k+3] ))
+        denormed[j,k:k+3] = data_utils.rotmat2euler(data_utils.expmap2rotmat(denormed[j, k:k + 3]))
 
     all_denormed.append( denormed )
 

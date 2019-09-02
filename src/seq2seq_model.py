@@ -5,9 +5,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-#from tensorflow.python.ops import array_ops
-#from tensorflow.python.ops import variable_scope as vs
-
 import random
 
 import numpy as np
@@ -16,8 +13,7 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
 from torch import nn
 import torch.nn.functional as F
-#import rnn_cell_extensions # my extensions of the tf repos
-import data_utils
+# import custom_gru
 
 class Seq2SeqModel(nn.Module):
   """Sequence-to-sequence model for human motion prediction"""
@@ -81,6 +77,7 @@ class Seq2SeqModel(nn.Module):
     # === Create the RNN that will keep the state ===
     print('rnn_size = {0}'.format( rnn_size ))
     self.cell = torch.nn.GRUCell(self.input_size, self.rnn_size)
+    # self.cell = custom_gru.CustomGRU(self.input_size, self.rnn_size)
 #    self.cell2 = torch.nn.GRUCell(self.rnn_size, self.rnn_size)
 
     self.fc1 = nn.Linear(self.rnn_size, self.HUMAN_SIZE)

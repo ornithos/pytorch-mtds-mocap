@@ -1,11 +1,7 @@
 """Functions to visualize human poses"""
 
-import matplotlib.pyplot as plt
-import data_utils
 import numpy as np
-import h5py
-import os
-from mpl_toolkits.mplot3d import Axes3D
+
 
 class Ax3DPose(object):
   def __init__(self, ax, lcolor="#3498db", rcolor="#e74c3c"):
