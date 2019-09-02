@@ -76,13 +76,14 @@ class Seq2SeqModel(nn.Module):
     self.rnn_size = rnn_size
     self.batch_size = batch_size
     self.dropout = dropout
-
+    self.num_layers = num_layers
     # === Create the RNN that will keep the state ===
     print('rnn_size = {0}'.format( rnn_size ))
     self.cell = torch.nn.GRUCell(self.input_size, self.rnn_size)
-#    self.cell2 = torch.nn.GRUCell(self.rnn_size, self.rnn_size)
+    if num_layers > 1:
+      self.cell2 = torch.nn.GRUCell(self.rnn_size, self.rnn_size)
 
-    self.fc1 = nn.Linear(self.rnn_size, self.HUMAN_SIZE)
+    self.fc1 = nn.Linear(self.rnn_size * num_layers, self.HUMAN_SIZE)
 
 
   def forward(self, encoder_inputs, decoder_inputs, use_cuda):
@@ -94,17 +95,20 @@ class Seq2SeqModel(nn.Module):
     decoder_inputs = torch.transpose(decoder_inputs, 0, 1)
 
     state = torch.zeros(batchsize, self.rnn_size)
-#    state2 = torch.zeros(batchsize, self.rnn_size)
+    if self.num_layers > 1:
+        state2 = torch.zeros(batchsize, self.rnn_size)
     if use_cuda:
         state = state.cuda()
-     #   state2 = state2.cuda()
+        if self.num_layers > 1:
+            state2 = state2.cuda()
+
     for i in range(self.source_seq_len-1):
         state = self.cell(encoder_inputs[i], state)
-#        state2 = self.cell2(state, state2)
+        if self.num_layers > 1:
+            state2 = self.cell2(state, state2)
+            state2 = F.dropout(state2, self.dropout, training=self.training)
+
         state = F.dropout(state, self.dropout, training=self.training)
-        if use_cuda:
-            state = state.cuda()
-#            state2 = state2.cuda()
 
     outputs = []
     prev = None
@@ -115,12 +119,13 @@ class Seq2SeqModel(nn.Module):
       inp = inp.detach()
 
       state = self.cell(inp, state)
-#      state2 = self.cell2(state, state2)
+      if self.num_layers > 1:
+          state2 = self.cell2(state, state2)
+          state_out = torch.cat((state, state2), dim=1)
+      else:
+          state_out = state
 
-#      output = inp + self.fc1(state2)
-      
-#      state = F.dropout(state, self.dropout, training=self.training)
-      output = inp[:, 0:self.HUMAN_SIZE] + self.fc1(F.dropout(state, self.dropout, training=self.training))
+      output = inp[:, 0:self.HUMAN_SIZE] + self.fc1(F.dropout(state_out, self.dropout, training=self.training))
 
       outputs.append(output.view([1, batchsize, self.HUMAN_SIZE]))
       if loop_function is not None:

@@ -99,7 +99,6 @@ args = parser.parse_args()
 assert args.omit_one_hot, "not implemented yet"
 assert args.action == "walking", "not implemented yet"
 assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
-assert args.num_layers == 1, "not implemented yet. (Also not in original fork.)"
 
 train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'style_{0}'.format(args.style_ix),
@@ -111,6 +110,7 @@ train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'depth_{0}'.format(args.num_layers),
   'size_{0}'.format(args.size),
   'lr_{0}'.format(args.learning_rate),
+  'layers_{0}'.format(args.num_layers),
   'residual_vel' if args.residual_velocities else 'not_residual_vel'))
 
 print(train_dir)
