@@ -26,6 +26,8 @@ import argparse
 parser = argparse.ArgumentParser(description='Train RNN for human pose estimation')
 parser.add_argument('--style_ix', dest='style_ix',
                   help='Style index to hold out', type=int, required=True)
+parser.add_argument('--weight_decay', dest='weight_decay', help='regularisation', default=0.0, type=float)
+parser.add_argument('--optimiser', dest='optimiser', help='optimisation algorithm', default='SGD', type=str)
 parser.add_argument('--learning_rate', dest='learning_rate',
                   help='Learning rate',
                   default=0.005, type=float)
@@ -103,8 +105,8 @@ train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'style_{0}'.format(args.style_ix),
   'out_{0}'.format(args.seq_length_out),
   'iterations_{0}'.format(args.iterations),
-  args.architecture,
-  args.loss_to_use,
+  'optimiser_{0}'.format(args.optimiser),
+  'weightdecay_{0}'.format(args.weight_decay),
   'omit_one_hot' if args.omit_one_hot else 'one_hot',
   'depth_{0}'.format(args.num_layers),
   'size_{0}'.format(args.size),
@@ -168,8 +170,12 @@ def train():
     previous_losses = []
 
     step_time, loss = 0, 0
-    optimiser = optim.SGD(model.parameters(), lr=args.learning_rate)
-    #optimiser = optim.Adam(model.parameters(), lr=learning_rate, betas = (0.9, 0.999))
+    if args.optimiser.upper() == 'SGD':
+        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    elif args.optimiser.upper() == 'ADAM':
+        optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas = (0.9, 0.999), weight_decay=args.weight_decay)
+    else:
+        Exception('Unknown optimiser specified `{:s}`, please choose `SGD` or `Adam`'.format(args.optimiser))
 
     for _ in range( args.iterations ):
       optimiser.zero_grad()
@@ -205,6 +211,8 @@ def train():
 
       if current_step % 10 == 0:
         print("step {0:04d}; step_loss: {1:.4f}".format(current_step, step_loss ))
+      if current_step % 50 == 0:
+        sys.stdout.flush()
 
       step_time += (time.time() - start_time) / args.test_every
       loss += step_loss / args.test_every
