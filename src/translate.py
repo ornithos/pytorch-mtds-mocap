@@ -5,13 +5,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import math
 import os
+import random
 import sys
 import time
+import h5py
 
 import numpy as np
+from six.moves import xrange # pylint: disable=redefined-builtin
 
-from __trash__ import data_utils
+import data_utils
 import seq2seq_model
 import torch
 import torch.optim as optim
@@ -22,6 +26,8 @@ import argparse
 parser = argparse.ArgumentParser(description='Train RNN for human pose estimation')
 parser.add_argument('--style_ix', dest='style_ix',
                   help='Style index to hold out', type=int, required=True)
+parser.add_argument('--weight_decay', dest='weight_decay', help='regularisation', default=0.0, type=float)
+parser.add_argument('--optimiser', dest='optimiser', help='optimisation algorithm', default='SGD', type=str)
 parser.add_argument('--learning_rate', dest='learning_rate',
                   help='Learning rate',
                   default=0.005, type=float)
@@ -71,8 +77,8 @@ parser.add_argument('--omit_one_hot', dest='omit_one_hot',
 # Directories
 parser.add_argument('--data_dir', dest='data_dir',
                   help='Data directory',
-                  default=os.path.normpath("../../mocap-mtds/"), type=str)
-                  # default=os.path.normpath("../../mocap-mtds/data/"), type=str)
+                  # default=os.path.normpath("../../mocap-mtds/"), type=str)
+                  default=os.path.normpath("../../mocap-mtds/data/"), type=str)
 parser.add_argument('--train_dir', dest='train_dir',
                   help='Training directory',
                   default=os.path.normpath("./experiments/"), type=str)
@@ -93,17 +99,13 @@ args = parser.parse_args()
 assert args.omit_one_hot, "not implemented yet"
 assert args.action == "walking", "not implemented yet"
 assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
-assert args.num_layers == 1, "not implemented yet. (Also not in original fork.)"
-
-if not os.path.isfile(os.path.join(args.data_dir, "style_lkp.npz")):
-    args.data_dir = os.path.normpath("../../mocap-mtds/data/")
 
 train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
   'style_{0}'.format(args.style_ix),
   'out_{0}'.format(args.seq_length_out),
   'iterations_{0}'.format(args.iterations),
-  args.architecture,
-  args.loss_to_use,
+  'optimiser_{0}'.format(args.optimiser),
+  'weightdecay_{0}'.format(args.weight_decay),
   'omit_one_hot' if args.omit_one_hot else 'one_hot',
   'depth_{0}'.format(args.num_layers),
   'size_{0}'.format(args.size),
@@ -130,9 +132,9 @@ def create_model(actions, sampling=False):
       len( actions ),
       not args.omit_one_hot,
       args.residual_velocities,
-      64,
+      output_dim=67,
       dtype=torch.float32,
-      num_traj=44)
+      num_traj=35)
 
   if len(args.load) <= 0:
     return model
@@ -163,13 +165,17 @@ def train():
 
     current_step = 0
     if len(args.load) > 0:
-        Exception("Training from load file no longer supported in this fork.")
+        Exception("Training from load file not supported in this file.")
 
     previous_losses = []
 
     step_time, loss = 0, 0
-    optimiser = optim.SGD(model.parameters(), lr=args.learning_rate)
-    #optimiser = optim.Adam(model.parameters(), lr=learning_rate, betas = (0.9, 0.999))
+    if args.optimiser.upper() == 'SGD':
+        optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    elif args.optimiser.upper() == 'ADAM':
+        optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas = (0.9, 0.999), weight_decay=args.weight_decay)
+    else:
+        Exception('Unknown optimiser specified `{:s}`, please choose `SGD` or `Adam`'.format(args.optimiser))
 
     for _ in range( args.iterations ):
       optimiser.zero_grad()
@@ -205,6 +211,8 @@ def train():
 
       if current_step % 10 == 0:
         print("step {0:04d}; step_loss: {1:.4f}".format(current_step, step_loss ))
+      if current_step % 50 == 0:
+        sys.stdout.flush()
 
       step_time += (time.time() - start_time) / args.test_every
       loss += step_loss / args.test_every
@@ -223,7 +231,7 @@ def train():
         model.eval()
 
         # === Validation with random data from test set ===
-        encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
+        encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(test_set_Y, test_set_U, not args.omit_one_hot, stratify=True)
         encoder_inputs = torch.from_numpy(encoder_inputs).float()
         decoder_inputs = torch.from_numpy(decoder_inputs).float()
         decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -243,8 +251,7 @@ def train():
 
         print()
         print("{0: <16} |".format("milliseconds"), end="")
-        for ms in [80, 320, 640, 1000, 1520, 2000, 2520]:
-          print(" {0:5d} |".format(ms), end="")
+        print((" {:5d} |"*7).format(*[80, 320, 640, 1000, 1520, 2000, 2520]))
         print()
 
         mean_loss = step_loss.detach().cpu().mean(dim=0).numpy()
@@ -310,12 +317,12 @@ def get_srnn_gts( actions, model, test_set, data_mean, data_std, dim_to_ignore, 
 
     # expmap -> rotmat -> euler
     for i in np.arange( srnn_expmap.shape[0] ):
-      denormed = data_utils.unNormalizeData(srnn_expmap[i, :, :], data_mean, data_std, dim_to_ignore, actions, one_hot)
+      denormed = data_utils.unNormalizeData(srnn_expmap[i,:,:], data_mean, data_std, dim_to_ignore, actions, one_hot )
 
       if to_euler:
         for j in np.arange( denormed.shape[0] ):
           for k in np.arange(3,97,3):
-            denormed[j,k:k+3] = data_utils.rotmat2euler(data_utils.expmap2rotmat(denormed[j, k:k + 3]))
+            denormed[j,k:k+3] = data_utils.rotmat2euler( data_utils.expmap2rotmat( denormed[j,k:k+3] ))
 
       srnn_gt_euler.append( denormed );
 
@@ -429,21 +436,40 @@ def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
   print ("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
            seq_length_in, seq_length_out))
 
+  pct_train = 0.875
   style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
-  train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1,9) if i != style_ix])
-  train_set_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps.npz"))
-  train_set_U = np.load(os.path.join(data_dir, "edin_Us_30fps.npz"))
-  train_set_Y = [train_set_Y[str(i)] for i in train_ixs]
-  train_set_U = [train_set_U[str(i)] for i in train_ixs]
+  style_ixs = set(range(1, 9)) - {style_ix}
 
-  test_set_Y = np.load(os.path.join(data_dir, "test_input_{0}_y.npz".format(style_ix)))
-  test_set_U = np.load(os.path.join(data_dir, "test_input_{0}_u.npz".format(style_ix)))
-  test_set_Y = [test_set_Y[str(i+1)] for i in range(len(test_set_Y.keys()))]
-  test_set_U = [test_set_U[str(i+1)] for i in range(len(test_set_U.keys()))]
+  load_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps_final.npz"))
+  load_U = np.load(os.path.join(data_dir, "edin_Us_30fps_final.npz"))
+
+  train_ix_end = np.floor([sum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) * pct_train for j in style_ixs])
+  train_ix_end = train_ix_end.astype('int')
+  train_len_cum = [np.cumsum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) for j in style_ixs]
+
+  train_set_Y, train_set_U, valid_set_Y, valid_set_U = [], [], [], []
+  for j, e, cumsumlens in zip(style_ixs, train_ix_end, train_len_cum):
+      found_breakpt = False
+      cum_prv = 0
+      for i, cuml in enumerate(cumsumlens):
+          load_ix = str(style_lkp[str(j)][i])
+          if cuml < e:
+              train_set_Y.append(load_Y[load_ix])
+              train_set_U.append(load_U[load_ix])
+              cum_prv = cuml
+          elif not found_breakpt:
+              train_set_Y.append(load_Y[load_ix][:e - cum_prv, :])
+              train_set_U.append(load_U[load_ix][:e - cum_prv, :])
+              valid_set_Y.append(load_Y[load_ix][e - cum_prv:, :])
+              valid_set_U.append(load_U[load_ix][e - cum_prv:, :])
+              found_breakpt = True
+          else:
+              valid_set_Y.append(load_Y[load_ix])
+              valid_set_U.append(load_U[load_ix])
 
   print("done reading data.")
 
-  return train_set_Y, train_set_U, test_set_Y, test_set_U
+  return train_set_Y, train_set_U, valid_set_Y, valid_set_U
 
 
 def main():

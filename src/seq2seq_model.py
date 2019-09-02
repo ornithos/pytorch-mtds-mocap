@@ -5,6 +5,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+#from tensorflow.python.ops import array_ops
+#from tensorflow.python.ops import variable_scope as vs
+
 import random
 
 import numpy as np
@@ -13,7 +16,8 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
 from torch import nn
 import torch.nn.functional as F
-# import custom_gru
+#import rnn_cell_extensions # my extensions of the tf repos
+import data_utils
 
 class Seq2SeqModel(nn.Module):
   """Sequence-to-sequence model for human motion prediction"""
@@ -32,7 +36,7 @@ class Seq2SeqModel(nn.Module):
                number_of_actions,
                one_hot=True,
                residual_velocities=False,
-               output_dim=64,
+               output_dim=67,
                dropout=0.0,
                dtype=torch.float32,
                num_traj=0):
@@ -73,14 +77,14 @@ class Seq2SeqModel(nn.Module):
     self.rnn_size = rnn_size
     self.batch_size = batch_size
     self.dropout = dropout
-
+    self.num_layers = num_layers
     # === Create the RNN that will keep the state ===
     print('rnn_size = {0}'.format( rnn_size ))
     self.cell = torch.nn.GRUCell(self.input_size, self.rnn_size)
-    # self.cell = custom_gru.CustomGRU(self.input_size, self.rnn_size)
-#    self.cell2 = torch.nn.GRUCell(self.rnn_size, self.rnn_size)
+    if num_layers > 1:
+      self.cell2 = torch.nn.GRUCell(self.rnn_size, self.rnn_size)
 
-    self.fc1 = nn.Linear(self.rnn_size, self.HUMAN_SIZE)
+    self.fc1 = nn.Linear(self.rnn_size * num_layers, self.HUMAN_SIZE)
 
 
   def forward(self, encoder_inputs, decoder_inputs, use_cuda):
@@ -92,17 +96,20 @@ class Seq2SeqModel(nn.Module):
     decoder_inputs = torch.transpose(decoder_inputs, 0, 1)
 
     state = torch.zeros(batchsize, self.rnn_size)
-#    state2 = torch.zeros(batchsize, self.rnn_size)
+    if self.num_layers > 1:
+        state2 = torch.zeros(batchsize, self.rnn_size)
     if use_cuda:
         state = state.cuda()
-     #   state2 = state2.cuda()
+        if self.num_layers > 1:
+            state2 = state2.cuda()
+
     for i in range(self.source_seq_len-1):
         state = self.cell(encoder_inputs[i], state)
-#        state2 = self.cell2(state, state2)
+        if self.num_layers > 1:
+            state2 = self.cell2(state, state2)
+            state2 = F.dropout(state2, self.dropout, training=self.training)
+
         state = F.dropout(state, self.dropout, training=self.training)
-        if use_cuda:
-            state = state.cuda()
-#            state2 = state2.cuda()
 
     outputs = []
     prev = None
@@ -113,12 +120,13 @@ class Seq2SeqModel(nn.Module):
       inp = inp.detach()
 
       state = self.cell(inp, state)
-#      state2 = self.cell2(state, state2)
+      if self.num_layers > 1:
+          state2 = self.cell2(state, state2)
+          state_out = torch.cat((state, state2), dim=1)
+      else:
+          state_out = state
 
-#      output = inp + self.fc1(state2)
-      
-#      state = F.dropout(state, self.dropout, training=self.training)
-      output = inp[:, 0:self.HUMAN_SIZE] + self.fc1(F.dropout(state, self.dropout, training=self.training))
+      output = inp[:, 0:self.HUMAN_SIZE] + self.fc1(F.dropout(state_out, self.dropout, training=self.training))
 
       outputs.append(output.view([1, batchsize, self.HUMAN_SIZE]))
       if loop_function is not None:
@@ -129,8 +137,7 @@ class Seq2SeqModel(nn.Module):
     outputs = torch.cat(outputs, 0)
     return torch.transpose(outputs, 0, 1)
 
-
-  def get_batch( self, data_Y, data_U, actions ):
+  def get_batch(self, data_Y, data_U, actions, stratify=False):
     """Get a random batch of data from the specified bucket, prepare for step.
 
     Args
@@ -142,9 +149,14 @@ class Seq2SeqModel(nn.Module):
     """
 
     # Select entries at random
-    probs    = np.array([y.shape[0] for y in data_Y])
-    probs    = probs / probs.sum()
-    chosen_keys = np.random.choice( len(data_Y), self.batch_size, p=probs)
+    probs = np.array([y.shape[0] for y in data_Y])
+    probs = probs / probs.sum()
+    if not stratify:
+      chosen_keys = np.random.choice(len(data_Y), self.batch_size, p=probs)
+      bsz = self.batch_size
+    else:
+      bsz = len(data_Y)
+      chosen_keys = list(range(bsz))
 
     # How many frames in total do we need?
     total_frames = self.source_seq_len + self.target_seq_len
@@ -154,12 +166,13 @@ class Seq2SeqModel(nn.Module):
     decoder_inputs  = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
     decoder_outputs = np.zeros((self.batch_size, self.target_seq_len, self.HUMAN_SIZE), dtype=float)
 
-    for i in xrange( self.batch_size ):
+    for i in xrange( bsz ):
 
       the_key = chosen_keys[i]
 
       # Get the number of frames
       n = data_Y[ the_key ].shape[0]
+      assert n > total_frames, "n of file {:s} too small.".format(the_key)
 
       # Sample somewherein the middle
       idx = np.random.randint( 1, n-total_frames )
@@ -206,7 +219,7 @@ class Seq2SeqModel(nn.Module):
     decoder_outputs = np.zeros((batch_size, target_len, self.HUMAN_SIZE), dtype=float)
 
     for i in chosen_keys:
-      # Add the data    (batch, tt, dd)
+      # Add the data
       encoder_inputs[i, :, 0:self.HUMAN_SIZE] = data_Y[i].T[0:source_len-1, :]
       encoder_inputs[i, :, self.HUMAN_SIZE:]  = data_U[i].T[0:source_len-1, :]
 
