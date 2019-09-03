@@ -15,107 +15,14 @@ import h5py
 import numpy as np
 from six.moves import xrange # pylint: disable=redefined-builtin
 
-import data_utils
 import seq2seq_model
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-import argparse
+import parseopts4bmark
 
-# Learning
-parser = argparse.ArgumentParser(description='Train RNN for human pose estimation')
-parser.add_argument('--style_ix', dest='style_ix',
-                  help='Style index to hold out', type=int, required=True)
-parser.add_argument('--weight_decay', dest='weight_decay', help='regularisation', default=0.0, type=float)
-parser.add_argument('--optimiser', dest='optimiser', help='optimisation algorithm', default='SGD', type=str)
-parser.add_argument('--learning_rate', dest='learning_rate',
-                  help='Learning rate',
-                  default=0.005, type=float)
-parser.add_argument('--learning_rate_decay_factor', dest='learning_rate_decay_factor',
-                  help='Learning rate is multiplied by this much. 1 means no decay.',
-                  default=0.95, type=float)
-parser.add_argument('--learning_rate_step', dest='learning_rate_step',
-                  help='Every this many steps, do decay.',
-                  default=10000, type=int)
-parser.add_argument('--batch_size', dest='batch_size',
-                  help='Batch size to use during training.',
-                  default=16, type=int)
-parser.add_argument('--max_gradient_norm', dest='max_gradient_norm',
-                  help='Clip gradients to this norm.',
-                  default=5, type=float)
-parser.add_argument('--iterations', dest='iterations',
-                  help='Iterations to train for.',
-                  default=1e5, type=int)
-parser.add_argument('--test_every', dest='test_every',
-                  help='',
-                  default=200, type=int)
-# Architecture
-parser.add_argument('--architecture', dest='architecture',
-                  help='Seq2seq architecture to use: [basic, tied].',
-                  default='tied', type=str)
-parser.add_argument('--loss_to_use', dest='loss_to_use',
-                  help='The type of loss to use, supervised or sampling_based',
-                  default='sampling_based', type=str)
-parser.add_argument('--residual_velocities', dest='residual_velocities',
-                  help='Add a residual connection that effectively models velocities',action='store_true',
-                  default=True)
-parser.add_argument('--size', dest='size',
-                  help='Size of each model layer.',
-                  default=1024, type=int)
-parser.add_argument('--num_layers', dest='num_layers',
-                  help='Number of layers in the model.',
-                  default=1, type=int)
-parser.add_argument('--seq_length_in', dest='seq_length_in',
-                  help='Number of frames to feed into the encoder. 25 fp',
-                  default=64, type=int)
-parser.add_argument('--seq_length_out', dest='seq_length_out',
-                  help='Number of frames that the decoder has to predict. 25fps',
-                  default=64, type=int)
-parser.add_argument('--omit_one_hot', dest='omit_one_hot',
-                  help='', action='store_true',
-                  default=True)
-# Directories
-parser.add_argument('--data_dir', dest='data_dir',
-                  help='Data directory',
-                  # default=os.path.normpath("../../mocap-mtds/"), type=str)
-                  default=os.path.normpath("../../mocap-mtds/data/"), type=str)
-parser.add_argument('--train_dir', dest='train_dir',
-                  help='Training directory',
-                  default=os.path.normpath("./experiments/"), type=str)
-parser.add_argument('--action', dest='action',
-                  help='The action to train on. all means all the actions, all_periodic means walking, eating and smoking',
-                  default='walking', type=str)
-parser.add_argument('--use_cpu', dest='use_cpu',
-                  help='', action='store_true',
-                  default=False)
-parser.add_argument('--load', dest='load',
-                  help='Try to load a previous checkpoint.',
-                  default='', type=str)
-parser.add_argument('--sample', dest='sample',
-                  help='Set to True for sampling.', action='store_true',
-                  default=False)
 
-args = parser.parse_args()
-assert args.omit_one_hot, "not implemented yet"
-assert args.action == "walking", "not implemented yet"
-assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
-
-train_dir = os.path.normpath(os.path.join( args.train_dir, args.action,
-  'style_{0}'.format(args.style_ix),
-  'out_{0}'.format(args.seq_length_out),
-  'iterations_{0}'.format(args.iterations),
-  'optimiser_{0}'.format(args.optimiser),
-  'weightdecay_{0}'.format(args.weight_decay),
-  'omit_one_hot' if args.omit_one_hot else 'one_hot',
-  'depth_{0}'.format(args.num_layers),
-  'size_{0}'.format(args.size),
-  'lr_{0}'.format(args.learning_rate),
-  'residual_vel' if args.residual_velocities else 'not_residual_vel'))
-
-print(train_dir)
-os.makedirs(train_dir, exist_ok=True)
-
-def create_model(actions, sampling=False):
+def create_model(args, actions, sampling=False):
   """Create translation model and initialize or load parameters in session."""
 
   model = seq2seq_model.Seq2SeqModel(
@@ -144,12 +51,10 @@ def create_model(actions, sampling=False):
   return model
 
 
-def train():
+def train(args):
   """Train a seq2seq model on human motion"""
 
   actions = define_actions( args.action )
-
-  number_of_actions = len( actions )
 
   train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(
     args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix)
@@ -157,7 +62,7 @@ def train():
   # Limit TF to take a fraction of the GPU memory
 
   if True:
-    model = create_model(actions, args.sample)
+    model = create_model(args, actions, args.sample)
     if not args.use_cpu:
         model = model.cuda()
 
@@ -278,7 +183,7 @@ def train():
               args.learning_rate, step_time*1000, loss,
               val_loss))
 
-        torch.save(model, train_dir + '/model_' + str(current_step))
+        torch.save(model, args.train_dir + '/model_' + str(current_step))
 
         print()
         previous_losses.append(loss)
@@ -289,50 +194,7 @@ def train():
         sys.stdout.flush()
 
 
-def get_srnn_gts( actions, model, test_set, data_mean, data_std, dim_to_ignore, one_hot, to_euler=True ):
-  """
-  Get the ground truths for srnn's sequences, and convert to Euler angles.
-  (the error is always computed in Euler angles).
-
-  Args
-    actions: a list of actions to get ground truths for.
-    model: training model we are using (we only use the "get_batch" method).
-    test_set: dictionary with normalized training data.
-    data_mean: d-long vector with the mean of the training data.
-    data_std: d-long vector with the standard deviation of the training data.
-    dim_to_ignore: dimensions that we are not using to train/predict.
-    one_hot: whether the data comes with one-hot encoding indicating action.
-    to_euler: whether to convert the angles to Euler format or keep thm in exponential map
-
-  Returns
-    srnn_gts_euler: a dictionary where the keys are actions, and the values
-      are the ground_truth, denormalized expected outputs of srnns's seeds.
-  """
-  srnn_gts_euler = {}
-
-  for action in actions:
-
-    srnn_gt_euler = []
-    _, _, srnn_expmap = model.get_batch_srnn( test_set, action )
-
-    # expmap -> rotmat -> euler
-    for i in np.arange( srnn_expmap.shape[0] ):
-      denormed = data_utils.unNormalizeData(srnn_expmap[i,:,:], data_mean, data_std, dim_to_ignore, actions, one_hot )
-
-      if to_euler:
-        for j in np.arange( denormed.shape[0] ):
-          for k in np.arange(3,97,3):
-            denormed[j,k:k+3] = data_utils.rotmat2euler( data_utils.expmap2rotmat( denormed[j,k:k+3] ))
-
-      srnn_gt_euler.append( denormed );
-
-    # Put back in the dictionary
-    srnn_gts_euler[action] = srnn_gt_euler
-
-  return srnn_gts_euler
-
-
-def sample():
+def sample(args):
     """Sample predictions for srnn's seeds"""
     actions = define_actions(args.action)
 
@@ -343,7 +205,7 @@ def sample():
         # === Create the model ===
         print("Creating %d layers of %d units." % (args.num_layers, args.size))
         sampling = True
-        model = create_model(actions, sampling)
+        model = create_model(args, actions, sampling)
         if not args.use_cpu:
             model = model.cuda()
         print("Model created")
@@ -356,7 +218,7 @@ def sample():
             pass
 
         # Make prediction with srnn' seeds
-        encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
+        encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(test_set_Y, test_set_U, -1)
         encoder_inputs = torch.from_numpy(encoder_inputs).float()
         decoder_inputs = torch.from_numpy(decoder_inputs).float()
         decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -472,11 +334,21 @@ def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
   return train_set_Y, train_set_U, valid_set_Y, valid_set_U
 
 
-def main():
-  if args.sample:
-    sample()
-  else:
-    train()
+
+def main(args=None):
+    args = parseopts4bmark.parse_args(args)
+    args = parseopts4bmark.initial_arg_transform(args)
+
+    print(args.train_dir)
+    os.makedirs(args.train_dir, exist_ok=True)
+
+    if args.sample:
+        sample(args)
+    else:
+        train(args)
+
+    return args
+
 
 if __name__ == "__main__":
     main()

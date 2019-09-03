@@ -16,8 +16,6 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
 from torch import nn
 import torch.nn.functional as F
-#import rnn_cell_extensions # my extensions of the tf repos
-import data_utils
 
 class Seq2SeqModel(nn.Module):
   """Sequence-to-sequence model for human motion prediction"""
@@ -182,11 +180,11 @@ class Seq2SeqModel(nn.Module):
       data_U_sel = data_U[ the_key ][idx:idx + total_frames, :]
 
       # Add the data
-      encoder_inputs[i,:,0:self.HUMAN_SIZE]  = data_Y_sel[0:self.source_seq_len-1, :]
-      encoder_inputs[i, :, self.HUMAN_SIZE:] = data_U_sel[0:self.source_seq_len-1, :]  # <= done
-      decoder_inputs[i,:,0:self.HUMAN_SIZE]  = data_Y_sel[self.source_seq_len-1:self.source_seq_len+self.target_seq_len-1, :]
-      decoder_inputs[i,:,self.HUMAN_SIZE:]  = data_U_sel[self.source_seq_len-1:self.source_seq_len + self.target_seq_len-1, :]
-      decoder_outputs[i,:,0:self.HUMAN_SIZE] = data_Y_sel[self.source_seq_len:self.source_seq_len + self.target_seq_len, :]    # <= done
+      encoder_inputs[i, :, 0:self.HUMAN_SIZE]  = data_Y_sel[0:self.source_seq_len-1, :]
+      encoder_inputs[i, :, self.HUMAN_SIZE: ] = data_U_sel[0:self.source_seq_len-1, :]  # <= done
+      decoder_inputs[i, :, 0:self.HUMAN_SIZE]  = data_Y_sel[self.source_seq_len-1:self.source_seq_len+self.target_seq_len-1, :]
+      decoder_inputs[i, :, self.HUMAN_SIZE: ]  = data_U_sel[self.source_seq_len-1:self.source_seq_len + self.target_seq_len-1, :]
+      decoder_outputs[i,:, 0:self.HUMAN_SIZE] = data_Y_sel[self.source_seq_len:self.source_seq_len + self.target_seq_len, :]    # <= done
 
     return encoder_inputs, decoder_inputs, decoder_outputs
 
