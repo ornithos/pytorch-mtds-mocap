@@ -45,6 +45,9 @@ def parse_args(args=None):
     parser.add_argument('--num_layers', dest='num_layers',
                         help='Number of layers in the model.',
                         default=1, type=int)
+    parser.add_argument('--open_loop', dest='open_loop',
+                        help='Training style: open loop (sometimes called "teacher forcing") or closed loop (' +
+                        'related to scheduled sampling).', action='store_true')
     parser.add_argument('--seq_length_in', dest='seq_length_in',
                         help='Number of frames to feed into the encoder. 25 fp',
                         default=64, type=int)

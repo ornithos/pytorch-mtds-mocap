@@ -86,6 +86,8 @@ class Seq2SeqModel(nn.Module):
 
 
   def forward(self, encoder_inputs, decoder_inputs, use_cuda):
+    # This appears to be coded in a slightly odd way, but is retained from the
+    # pytorch port of Martinez et al. => some confidence it's correct.
     def loop_function(prev, i):
         return prev
 
