@@ -79,7 +79,9 @@ class Seq2SeqModelOpen(nn.Module):
         self.num_layers = num_layers
 
         print('rnn_size = {0}'.format(rnn_size))
-        self.rnn = nn.GRU(self.input_size, self.rnn_size, num_layers=num_layers)
+        self.rnn = nn.GRU(self.input_size, self.rnn_size)
+        if num_layers > 1:
+            self.rnn2 = nn.GRU(self.rnn_size, self.rnn_size)
         self.fc1 = nn.Linear(self.rnn_size * num_layers, self.HUMAN_SIZE)
 
     def copy_rnn_weights_to_cells(self, cells):
@@ -88,10 +90,10 @@ class Seq2SeqModelOpen(nn.Module):
         cells[0].bias_ih = self.rnn.bias_ih_l0
         cells[0].bias_hh = self.rnn.bias_hh_l0
         if self.num_layers > 1:
-            cells[1].weight_ih = self.rnn.weight_ih_l1
-            cells[1].weight_hh = self.rnn.weight_hh_l1
-            cells[1].bias_ih = self.rnn.bias_ih_l1
-            cells[1].bias_hh = self.rnn.bias_hh_l1
+            cells[1].weight_ih = self.rnn2.weight_ih_l0
+            cells[1].weight_hh = self.rnn2.weight_hh_l0
+            cells[1].bias_ih = self.rnn2.bias_ih_l0
+            cells[1].bias_hh = self.rnn2.bias_hh_l0
 
     def forward(self, encoder_inputs, decoder_inputs, use_cuda):
 
@@ -99,13 +101,19 @@ class Seq2SeqModelOpen(nn.Module):
         inputs_enc, inputs_dec = torch.transpose(encoder_inputs, 0, 1), torch.transpose(decoder_inputs, 0, 1)
 
         if self.training:
-            _, state_enc = self.rnn(inputs_enc)
+            # able to take adv of PyTorch's fast GRU implementation. Use two sep GRU modules as want skip conns.
+            state1, state_enc = self.rnn(inputs_enc)
             state_out, _ = self.rnn(inputs_dec, state_enc)
+            if self.num_layers > 1:
+                _, state_enc2 = self.rnn2(state1)
+                state_out2, _ = self.rnn2(state_out, state_enc2)
+                state_out = torch.cat((state_out, state_out2), dim=2)
 
             outputs = inputs_dec[:, :, 0:self.HUMAN_SIZE] + self.fc1(
                 F.dropout(state_out, self.dropout, training=self.training))
 
         else:
+            # Need to feed predictions back into inputs => (afaik) need to fall back on slower GRUCells.
             # create GRUCells on-the-fly to avoid larger memory footprint
             cells = [torch.nn.GRUCell(self.input_size, self.rnn_size)]
             if self.num_layers >= 1:
@@ -115,7 +123,10 @@ class Seq2SeqModelOpen(nn.Module):
             outputs = []
 
             # Encode seed sequence
-            _, state_enc = self.rnn(inputs_enc)
+            state1, state_enc = self.rnn(inputs_enc)
+            if self.num_layers > 1:
+                _, state_enc2 = self.rnn2(state1)
+                state_enc = torch.cat((state_enc, state_enc2), dim=0)
 
             # First step t=1
             u = inputs_dec[0]
