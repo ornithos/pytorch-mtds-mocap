@@ -22,6 +22,9 @@ def create_model(args, total_num_batches):
     if args.dynamicsdict:
         return create_model_DD(args, total_num_batches)
 
+    if args.biasonly:
+        return create_model_BiasOnly(args, total_num_batches)
+
     model = mtfixb_model.MTGRU(
         args.seq_length_out,
         args.decoder_size,
@@ -90,6 +93,36 @@ def create_model_DD(args, total_num_batches):
         args.dropout_p,
         args.residual_velocities,
         args.init_state_noise)
+
+    if len(args.load) <= 0:
+        return model
+
+    print("Loading model")
+    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+    return model
+
+
+def create_model_BiasOnly(args, total_num_batches):
+    """Create MT model and initialize or load parameters in session."""
+
+    if len(args.load_layer1) > 0:
+        NotImplementedError("Layer 1 load not yet implemented for MT Bias Only.")
+
+    model = mtfixb_model.MTGRU_BiasOnly(
+        args.seq_length_out,
+        args.decoder_size,
+        args.decoder_size2,
+        args.batch_size,
+        total_num_batches,
+        args.k,
+        args.size_psi_hidden,
+        args.size_psi_lowrank,
+        args.bottleneck,
+        output_dim=args.human_size,
+        input_dim=args.input_size,
+        dropout=args.dropout_p,
+        residual_output=args.residual_velocities,
+        init_state_noise=args.init_state_noise)
 
     if len(args.load) <= 0:
         return model
@@ -205,10 +238,7 @@ def train(args):
         # remove Hard EM spec (if appl.)
         if is_hard_em and zls_ix is not None and current_step == args.hard_em_iters:
             optimiser.param_groups[zls_ix]['lr'] = z_lr
-
-            orig_std = model.mt_net.Z_mu.data.std(dim=0)
-            model.mt_net.Z_mu.data = model.mt_net.Z_mu.data / orig_std
-            model.mt_net.psi_decoder[0].weight.data = model.mt_net.psi_decoder[0].weight.data * orig_std
+            model.standardise_aggregate_posterior()
 
         # Once in a while, we save checkpoint, print statistics, and run evals.
         if current_step % args.test_every == 0:
