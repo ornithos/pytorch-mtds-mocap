@@ -478,8 +478,9 @@ class MTModule_BiasRNN(nn.Module):
         self.Z_logit_s = Parameter(torch.ones(total_num_batches, k) * -1.76).float()      # \approx 0.005 std
 
         # Model
-        self.rnn = nn.RNN(self.input_size + self.k, self.decoder_size, batch_first=True)
-        self.emission = nn.Linear(self.decoder_size, self.HUMAN_SIZE)
+        # ==> explicit ints used here because PyTorch's flatten_parameters (modules/rnn.py: 113) errors if np.int64.
+        self.rnn = nn.RNN(int(self.input_size + self.k), int(self.decoder_size), batch_first=True)
+        self.emission = nn.Linear(int(self.decoder_size), int(self.HUMAN_SIZE))
 
     def forward(self, inputs, mu, sd, state=None):
         batchsize = inputs.shape[0]
