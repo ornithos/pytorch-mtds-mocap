@@ -507,8 +507,8 @@ class MTModule_BiasRNN(nn.Module):
         inputs = torch.cat((inputs, z), dim=2)
 
         # Decode
-        state, state_enc = self.rnn(inputs)
-        yhats = self.emission(state)
+        hiddens, state_enc = self.rnn(inputs, state.unsqueeze(0))
+        yhats = self.emission(hiddens)
 
         return yhats, state_enc[0]   # 1st layer
 

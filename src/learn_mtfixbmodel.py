@@ -9,12 +9,17 @@ import torch
 import torch.optim as optim
 from torch.autograd import Variable
 
-import mtfixb_model
+import mtfixb_model, mtfixb_model2
 import parseopts
 
 
 def create_model(args, total_num_batches):
     """Create MT model and initialize or load parameters in session."""
+
+    if len(args.load) > 0:
+        print("Loading model")
+        model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+        return model
 
     if args.k == 0:
         return create_model_k0(args, total_num_batches)
@@ -24,6 +29,9 @@ def create_model(args, total_num_batches):
 
     if args.biasonly:
         return create_model_BiasOnly(args, total_num_batches)
+
+    if args.nobias:
+        return create_model_NoMTBias(args, total_num_batches)
 
     model = mtfixb_model.MTGRU(
         args.seq_length_out,
@@ -66,11 +74,6 @@ def create_model_k0(args, total_num_batches):
         args.residual_velocities,
         args.init_state_noise)
 
-    if len(args.load) <= 0:
-        return model
-
-    print("Loading model")
-    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
     return model
 
 
@@ -94,11 +97,6 @@ def create_model_DD(args, total_num_batches):
         args.residual_velocities,
         args.init_state_noise)
 
-    if len(args.load) <= 0:
-        return model
-
-    print("Loading model")
-    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
     return model
 
 
@@ -124,11 +122,32 @@ def create_model_BiasOnly(args, total_num_batches):
         residual_output=args.residual_velocities,
         init_state_noise=args.init_state_noise)
 
-    if len(args.load) <= 0:
-        return model
+    return model
 
-    print("Loading model")
-    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+
+def create_model_NoMTBias(args, total_num_batches):
+    """Create MT model and initialize or load parameters in session."""
+
+    if len(args.load_layer1) > 0:
+        NotImplementedError("Layer 1 load not yet implemented for MT Bias Only.")
+
+    model = mtfixb_model2.MTGRU_NoBias(
+        args.seq_length_out,
+        args.decoder_size,
+        args.decoder_size2,
+        args.batch_size,
+        total_num_batches,
+        args.k,
+        args.size_psi_hidden,
+        args.size_psi_lowrank,
+        args.bottleneck,
+        output_dim=args.human_size,
+        input_dim=args.input_size,
+        dropout=args.dropout_p,
+        residual_output=args.residual_velocities,
+        init_state_noise=args.init_state_noise,
+        mt_rnn=args.mt_rnn)
+
     return model
 
 
