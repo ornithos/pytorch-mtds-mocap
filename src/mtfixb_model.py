@@ -126,7 +126,9 @@ class MTGRU(nn.Module):
     def standardise_aggregate_posterior(self):
         orig_std = self.mt_net.Z_mu.data.std(dim=0)
         self.mt_net.Z_mu.data = self.mt_net.Z_mu.data / orig_std
-        self.mt_net.psi_decoder[0].weight.data = self.mt_net.psi_decoder[0].weight.data * orig_std
+        first_layer = self.mt_net.psi_decoder[0] if isinstance(self.mt_net.psi_decoder, torch.nn.Sequential) \
+            else self.mt_net.psi_decoder
+        first_layer.weight.data = first_layer.weight.data * orig_std
 
     def get_batch(self, data_iterator):
         return _get_batch(data_iterator, self.batch_size)
