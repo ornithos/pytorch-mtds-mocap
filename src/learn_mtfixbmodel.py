@@ -48,7 +48,8 @@ def create_model(args, total_num_batches):
         dropout=args.dropout_p,
         residual_output=args.residual_velocities,
         init_state_noise=args.init_state_noise,
-        mt_rnn=args.mt_rnn)
+        mt_rnn=args.mt_rnn,
+        psi_affine=args.psi_affine)
 
     if len(args.load) <= 0:
         if len(args.load_layer1) > 0:
@@ -146,7 +147,8 @@ def create_model_NoMTBias(args, total_num_batches):
         dropout=args.dropout_p,
         residual_output=args.residual_velocities,
         init_state_noise=args.init_state_noise,
-        mt_rnn=args.mt_rnn)
+        mt_rnn=args.mt_rnn,
+        psi_affine=args.psi_affine)
 
     return model
 

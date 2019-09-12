@@ -32,7 +32,8 @@ class MTGRU_NoBias(nn.Module):
                  dropout=0.0,
                  residual_output=True,
                  init_state_noise=False,
-                 mt_rnn=False):
+                 mt_rnn=False,
+                 psi_affine=False):
         """Create the model.
 
         Args:
@@ -83,7 +84,11 @@ class MTGRU_NoBias(nn.Module):
             dropout=dropout,
             residual_output=False,
             init_state_noise=init_state_noise,
-            is_gru=True if not self.mt_vanilla_rnn else False)
+            is_gru=True if not self.mt_vanilla_rnn else False,
+            psi_affine=psi_affine)
+
+        print(self.mt_net.psi_decoder)
+        print(self.mt_net.psi_decoder.bias)
 
         # Layer 1 GRU
         self.layer1_rnn = nn.GRU(self.input_size, hidden_size1, batch_first=True)
@@ -146,7 +151,8 @@ class MTModule_NoBias(nn.Module):
                  dropout=0.0,
                  residual_output=True,
                  init_state_noise=False,
-                 is_gru=True):
+                 is_gru=True,
+                 psi_affine=False):
         """Create the model.
 
         Args:
@@ -194,12 +200,16 @@ class MTModule_NoBias(nn.Module):
 
         # Psi Decoder weights
         n_psi_pars = sum(self._decoder_par_size())
-        self.psi_decoder = torch.nn.Sequential(
-            torch.nn.Linear(k, n_psi_hidden),
-            torch.nn.Tanh(),
-            torch.nn.Linear(n_psi_hidden, n_psi_lowrank),
-            torch.nn.Linear(n_psi_lowrank, n_psi_pars)
-        )
+        if psi_affine:
+            self.psi_decoder = torch.nn.Linear(k, n_psi_pars)
+            self.psi_decoder.bias.data = torch.randn(self.psi_decoder.bias.size()) * 0.5e-1
+        else:
+            self.psi_decoder = torch.nn.Sequential(
+                torch.nn.Linear(k, n_psi_hidden),
+                torch.nn.Tanh(),
+                torch.nn.Linear(n_psi_hidden, n_psi_lowrank),
+                torch.nn.Linear(n_psi_lowrank, n_psi_pars)
+            )
 
     def _decoder_par_shape(self):
         hidden_size = self.decoder_size

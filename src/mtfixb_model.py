@@ -32,7 +32,8 @@ class MTGRU(nn.Module):
                  dropout=0.0,
                  residual_output=True,
                  init_state_noise=False,
-                 mt_rnn=False):
+                 mt_rnn=False,
+                 psi_affine=False):
         """Create the model.
 
         Args:
@@ -78,6 +79,7 @@ class MTGRU(nn.Module):
             k,
             n_psi_hidden,
             n_psi_lowrank,
+            psi_affine=psi_affine,
             output_dim=output_dim,
             input_dim=self.interlayer_dim,
             dropout=dropout,
@@ -85,6 +87,7 @@ class MTGRU(nn.Module):
             init_state_noise=init_state_noise,
             is_gru=True if not self.mt_vanilla_rnn else False)
 
+        print(self.mt_net.psi_decoder)
         # Layer 1 GRU
         self.layer1_rnn = nn.GRU(self.input_size, hidden_size1, batch_first=True)
         self.layer1_linear = nn.Linear(self.hidden_size1, self.interlayer_dim)
@@ -140,6 +143,7 @@ class MTModule(nn.Module):
                  k,
                  n_psi_hidden,
                  n_psi_lowrank,
+                 psi_affine=False,
                  output_dim=64,
                  input_dim=0,
                  dropout=0.0,
@@ -187,16 +191,26 @@ class MTModule(nn.Module):
 
         # Psi Decoder weights
         n_psi_pars = sum(self._decoder_par_size())
-        self.psi_decoder = torch.nn.Sequential(
-            torch.nn.Linear(k, n_psi_hidden),
-            torch.nn.Tanh(),
-            torch.nn.Linear(n_psi_hidden, n_psi_lowrank),
-            torch.nn.Linear(n_psi_lowrank, n_psi_pars)
-        )
+        if psi_affine:
+            self.psi_decoder = torch.nn.Linear(k, n_psi_pars)
+            self.psi_decoder.bias.data = torch.randn(self.psi_decoder.bias.size()) * 0.5e-1
+        else:
+            self.psi_decoder = torch.nn.Sequential(
+                torch.nn.Linear(k, n_psi_hidden),
+                torch.nn.Tanh(),
+                torch.nn.Linear(n_psi_hidden, n_psi_lowrank),
+                torch.nn.Linear(n_psi_lowrank, n_psi_pars)
+            )
+
         # open GRU Decoder forget gate
         if self.is_gru:
-            self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size] += torch.ones_like(
-                self.psi_decoder[3].bias.data[self.decoder_size:2 * self.decoder_size]) * 1.5
+            if psi_affine:
+                final_layer = self.psi_decoder
+            else:
+                final_layer = self.psi_decoder[3]
+
+                final_layer.bias.data[self.decoder_size:2 * self.decoder_size] += torch.ones_like(
+                    final_layer.bias.data[self.decoder_size:2 * self.decoder_size]) * 1.5
 
     def _decoder_par_shape(self):
         hidden_size = self.decoder_size

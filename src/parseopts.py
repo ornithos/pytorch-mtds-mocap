@@ -52,6 +52,8 @@ def parse_args(args=None):
     parser.add_argument('--size_psi_lowrank', dest='size_psi_lowrank',
                         help='Subspace dimension to embed parameter manifold into. This is to reduce par count.',
                         type=int)
+    parser.add_argument('--factor_analyser', dest='psi_affine',
+                        help='Use linear Gaussian distribution over parameters', action="store_true")
     parser.add_argument('--seq_length_out', dest='seq_length_out',
                         help='Number of frames that the decoder has to predict. 25fps', type=int)
     parser.add_argument('--human_size', dest='human_size',
