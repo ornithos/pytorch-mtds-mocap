@@ -88,7 +88,6 @@ class MTGRU_NoBias(nn.Module):
             psi_affine=psi_affine)
 
         print(self.mt_net.psi_decoder)
-        print(self.mt_net.psi_decoder.bias)
 
         # Layer 1 GRU
         self.layer1_rnn = nn.GRU(self.input_size, hidden_size1, batch_first=True)
