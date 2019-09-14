@@ -407,53 +407,25 @@ def read_all_data(args):
 
     # === Read training data ===
     print("Reading training data (test index {0:d}).".format(args.style_ix))
-    input_test_fname = args.input_test_fname
-    if input_test_fname == "":
-        input_test_fname = "test_input_{0}_u.npz".format(args.style_ix)
 
     njoints = args.human_size
+    if not args.train_set_size == -1:
+        style_lkp = {str(i):range(1, args.train_set_size+1) for i in range(1,8+1)}
+        args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
+        args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
+    else:
+        style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
 
-    style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
     train_set_Y = np.load(os.path.join(args.data_dir, args.output_fname))
     train_set_U = np.load(os.path.join(args.data_dir, args.input_fname))
     njoints = train_set_Y[str(0)].shape[1] if njoints <= 0 else njoints
 
-    if not args.train_set_size == -1:
-        # restrict training set size to args.train_set_size per style.
-        _train_set_Y = []
-        _train_set_U = []
-        for i in range(1, len(style_lkp.keys()) + 1):   # CAREFUL: jl is 1-based!
-            if i == args.style_ix: continue
-            Nrem = args.train_set_size
-            for j in style_lkp[str(i)]:
-                y, u = train_set_Y[str(j)][:, :njoints], train_set_U[str(j)][:, :njoints]
-                n = y.shape[0] // 64
-                ncur = min(n, Nrem)
-                if ncur == 0:
-                    continue
-                elif ncur == n:
-                    _train_set_Y.append(y)
-                    _train_set_U.append(u)
-                else:
-                    _train_set_Y.append(y[:64 * ncur, :])
-                    _train_set_U.append(u[:64 * ncur, :])
-                Nrem -= ncur
-                if Nrem == 0:
-                    break
+    train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, len(style_lkp.keys()) + 1) if
+                                i != args.style_ix])  # CAREFUL: jl is 1-based!
+    train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
+    train_set_U = [train_set_U[str(i)] for i in train_ixs]
 
-        train_set_Y, train_set_U = _train_set_Y, _train_set_U
-    else:
-        train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, len(style_lkp.keys()) + 1) if
-                                    i != args.style_ix])  # CAREFUL: jl is 1-based!
-        train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
-        train_set_U = [train_set_U[str(i)] for i in train_ixs]
-
-    # test_set_Y = np.load(os.path.join(args.data_dir, "test_input_{0}_y.npz".format(args.style_ix)))
-    # test_set_U = np.load(os.path.join(args.data_dir, input_test_fname))
-    # test_set_Y = [test_set_Y[str(i + 1)][:njoints, :] for i in
-    #               range(len(test_set_Y.keys()))]  # whatever, apparently test is transpose of train
-    # test_set_U = [test_set_U[str(i + 1)] for i in range(len(test_set_U.keys()))]
-
+    print("Using files {:s}; {:s}".format(args.input_fname, args.output_fname))
     print("done reading data.")
 
     return mtfixb_model.DataIterator(train_set_Y, train_set_U, 64, min_size=64, overlap2=args.overlap_windows)
