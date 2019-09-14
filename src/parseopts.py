@@ -155,6 +155,11 @@ def initial_arg_transform(args):
         args.output_fname = append_DA(args.output_fname)
         args.stylelkp_fname = append_DA(args.stylelkp_fname)
 
+    if not args.train_set_size == -1:
+        assert not args.data_augmentation, "cannot do data augmentation and variable training set size."
+        args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
+        args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
+
     args.train_dir = get_model_save_dir(args)
 
     return args

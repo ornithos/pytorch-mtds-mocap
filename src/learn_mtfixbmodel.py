@@ -410,9 +410,7 @@ def read_all_data(args):
 
     njoints = args.human_size
     if not args.train_set_size == -1:
-        style_lkp = {str(i):range(1, args.train_set_size+1) for i in range(1,8+1)}
-        args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
-        args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
+        style_lkp = {str(i): range(1, args.train_set_size+1) for i in range(1,8+1)}
     else:
         style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
 
