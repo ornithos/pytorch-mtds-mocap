@@ -410,7 +410,7 @@ def read_all_data(args):
 
     njoints = args.human_size
     if not args.train_set_size == -1:
-        style_lkp = {str(i): range(1, args.train_set_size+1) for i in range(1,8+1)}
+        style_lkp = {str(i): range(1+args.train_set_size*(i-1), 1+args.train_set_size*i) for i in range(1,8+1)}
     else:
         style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
 
