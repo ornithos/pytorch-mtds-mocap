@@ -29,6 +29,8 @@ def parse_args(args=None):
     parser.add_argument('--model_type', dest='model_type', help='`biasonly` or `no_mt_bias`.')
     parser.add_argument('--learning_rate', dest='learning_rate', help='Learning rate for Z optimisation', type=float,
                         default=8e-3)
+    parser.add_argument('--model_path', dest='model_path', help='["Advanced"] Script usually constructs the path for' +
+                        'the model from your specification. Otherwise supply a custom path here', type=str, default='')
     parser.add_argument('--devmode', dest='devmode', help='Used for development on local machine: changes modelpath.',
                        action='store_true')
     if args is None:
@@ -64,16 +66,26 @@ def optimise(args):
     # Input transformations
     iscpu = device == "cpu"
     biasonly = model_type == "biasonly"
-    datafiles = "edin_Us_30fps_N{0:d}/edin_Ys_30fps_N{0:d}".format(train_set_size) if train_set_size > 0 else \
-        "edin_Us_30fps_final/edin_Ys_30fps_final"
-    model_path = "experiments/style_{:d}".format(style_ix) + "/out_64/iterations_20000/decoder_size_1024/" + \
-                 "zdim_{:d}".format(z_dim) + "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_2e-05/std/" + datafiles + \
-                 "/not_residual_vel/model_{:d}".format(model_iternums)
-    if args.devmode:
-        model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
+
+    # Construct model path
+    if len(args.model_path) == 0:
+        datafiles = "edin_Us_30fps_N{0:d}/edin_Ys_30fps_N{0:d}".format(train_set_size) if train_set_size > 0 else \
+            "edin_Us_30fps_final/edin_Ys_30fps_final"
+        model_path = "experiments/style_{:d}".format(style_ix) + \
+                     "/out_64/iterations_{:d}".format(model_iternums) + \
+                     "/decoder_size_1024/zdim_{:d}".format(z_dim) + \
+                     "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_{:.0e}/std/".format(2e-5 if biasonly else 5e-5) + \
+                     datafiles + "/not_residual_vel/model_{:d}".format(model_iternums)
+        if args.devmode:
+            if model_type == "biasonly":
+                model_path = "../../mocap-mtds/experiments/biasonly/style8_128_8e-4_k3_20000"
+            else:
+                model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
+    else:
+        model_path = args.model_path
 
     print("model: {:s}".format(model_path))
-    
+
     # Load model
     load_args = ["--style_ix", str(style_ix), "--load", model_path,
                  "--latent_k", str(z_dim), "--input_size", str(35)]
@@ -168,7 +180,7 @@ def optimise(args):
             optimiser.step()
             i % 5 == 0 and print("step {:d}: {:02.3f}".format(i, step_loss.cpu().data.numpy()))
 
-        print("Inner loop {:d}/{:d} took {:03.1f} seconds".format(j, len(iters), time.time() - start_time))
+        print("Inner loop {:d}/{:d} took {:03.1f} seconds".format(j+1, len(iters), time.time() - start_time))
 
         # Avoid local minima
         if j != len(iters) - 1:
