@@ -201,5 +201,8 @@ def optimise(args):
 if __name__ == "__main__":
     args = parse_args()
     Z, test_ixs = optimise(args)
-    savenm = "{:s}_N{:d}_k{:d}_i{:d}".format(args.model_type, args.train_set_size, args.latent_k, args.style_ix)
-    np.savez(os.path.join(args.data_dir, "optim_Z", savenm), Z)
+    Ntype = "N{:d}".format(args.train_set_size) if args.train_set_size > 0 else "TL"
+    savenm = "{:s}_{:s}_k{:d}_i{:d}".format(args.model_type, Ntype, args.k, args.style_ix)
+    dir = os.path.join(args.data_dir, "optim_Z")
+    os.makedirs(dir, exist_ok=True)
+    np.savez(os.path.join(dir, savenm), Z)
