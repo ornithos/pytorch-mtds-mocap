@@ -6,6 +6,7 @@ import learn_mtmodel
 import mtfixb_model
 import learn_mtfixbmodel
 import parseopts
+import optim_z
 
 class dictNamespace(object):
     """
