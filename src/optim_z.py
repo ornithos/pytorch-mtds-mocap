@@ -1,7 +1,10 @@
 import os, time
 import argparse
+
 import learn_mtfixbmodel
+import mtfixb_model
 import parseopts
+
 import torch
 import torch.optim as optim
 import numpy as np
@@ -12,7 +15,7 @@ def parse_args(args=None):
                         help='Style index for optimisation (1,..,8).', type=int, required=True)
     parser.add_argument('--latent_k', dest='k',
                         help='Dimension of parameter manifold (choose 3, 5, 7).', type=int, required=True)
-    parser.add_argument('--train_set_size', dest='train_set_size',
+    parser.add_argument('--train_set_size', dest='train_set_size', default=-1,
                         help='Size of training set that model was learned on (choose 4, 8, 16, 32, 64).', type=int)
     parser.add_argument('--test_set_size', dest='test_set_size',
                         help='Size of batch to perform optimisation over.', type=int, default=32)
@@ -22,7 +25,7 @@ def parse_args(args=None):
                              'estimation-ish.', type=int, default=1)
     parser.add_argument('--use_cpu', dest='use_cpu', help='', action='store_true')
     parser.add_argument('--data_dir', dest='data_dir', help='Data directory', type=str, default="../../mocap-mtds/data")
-    parser.add_argument('--training_iters', dest='iternums', help='Iterations to train for.', type=int)
+    parser.add_argument('--training_iters', dest='iternums', help='Num Iterations model was trained for.', type=int)
     parser.add_argument('--model_type', dest='model_type', help='`biasonly` or `no_mt_bias`.')
     parser.add_argument('--learning_rate', dest='learning_rate', help='Learning rate for Z optimisation', type=float,
                         default=8e-3)
@@ -53,16 +56,18 @@ def optimise(args):
     # Input checks
     assert model_type in ["biasonly", "no_mt_bias"]
     assert device in ["cpu", "cuda"], "device must be 'cpu' or 'cuda'."
-    assert train_set_size in [4, 8, 16, 32, 64]
+    assert train_set_size in [-1, 4, 8, 16, 32, 64]
     assert B_forward == 1, "cannot do LT prediction as not contiguous."
     assert z_dim in [3, 5, 7]
 
     # Input transformations
     iscpu = device == "cpu"
     biasonly = model_type == "biasonly"
-    model_path = "experiments/style_9/out_64/iterations_20000/decoder_size_1024/" + "zdim_{:d}".format(z_dim) + \
-        "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_2e-05/std/" + "edin_Us_30fps_N{0:d}/edin_Ys_30fps_N{0:d}".format(
-        train_set_size) + "/not_residual_vel/model_{:d}".format(model_iternums)
+    datafiles = "edin_Us_30fps_N{0:d}/edin_Ys_30fps_N{0:d}".format(train_set_size) if train_set_size > 0 else \
+        "edin_Us_30fps_final/edin_Ys_30fps_final"
+    model_path = "experiments/style_{:d}".format(style_ix) + "/out_64/iterations_20000/decoder_size_1024/" + \
+                 "zdim_{:d}".format(z_dim) + "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_2e-05/std/" + datafiles + \
+                 "/not_residual_vel/model_{:d}".format(model_iternums)
     # model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
 
     # Load model
@@ -91,17 +96,27 @@ def optimise(args):
 
     # Get test data
     print("Reading test data (test index {0:d}).".format(style_ix))
-    output_fname, input_fname, tstix_fname = map(lambda x: x + "_30fps_N{:d}.npz".format(train_set_size),
-                                              ["edin_Ys", "edin_Us", "edin_ixs"])
+    if train_set_size > 0:
+        output_fname, input_fname, tstix_fname = map(lambda x: x + "_30fps_N{:d}.npz".format(train_set_size),
+                                                  ["edin_Ys", "edin_Us", "edin_ixs"])
+        test_ixs_all = np.load(os.path.join(data_dir, tstix_fname))[str(style_ix)]
 
-    test_ixs_all = np.load(os.path.join(data_dir, tstix_fname))[str(style_ix)]
+        test_set_Y = np.load(os.path.join(data_dir, output_fname))
+        test_set_U = np.load(os.path.join(data_dir, input_fname))
+        test_set_Y = [test_set_Y[str(i)] for i in test_ixs_all]
+        test_set_U = [test_set_U[str(i)] for i in test_ixs_all]
+    else:
+        output_fname, input_fname = "edin_Ys_30fps_final.npz", "edin_Us_30fps_final.npz"
+        style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
+        test_set_Y = np.load(os.path.join(data_dir, output_fname))
+        test_set_U = np.load(os.path.join(data_dir, input_fname))
+        test_set_Y = [test_set_Y[str(i)] for i in style_lkp[str(style_ix)]]
+        test_set_U = [test_set_U[str(i)] for i in style_lkp[str(style_ix)]]
+        all_data = list(mtfixb_model.DataIterator(test_set_Y, test_set_U, 64, min_size=64, overlap2=False))
+        test_set_Y = [all_data[i][0] for i in range(len(all_data))]
+        test_set_U = [all_data[i][1] for i in range(len(all_data))]
 
-    test_set_Y = np.load(os.path.join(data_dir, output_fname))
-    test_set_U = np.load(os.path.join(data_dir, input_fname))
-    test_set_Y = [test_set_Y[str(i)] for i in test_ixs_all]
-    test_set_U = [test_set_U[str(i)] for i in test_ixs_all]
-
-    print("Using files {:s}; {:s}; {:s}".format(input_fname, output_fname, tstix_fname))
+    print("Using files {:s}; {:s}".format(input_fname, output_fname))
     print("done reading data.")
 
     # Determine which test examples we will use.
