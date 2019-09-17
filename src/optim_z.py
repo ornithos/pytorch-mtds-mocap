@@ -29,7 +29,8 @@ def parse_args(args=None):
     parser.add_argument('--model_type', dest='model_type', help='`biasonly` or `no_mt_bias`.')
     parser.add_argument('--learning_rate', dest='learning_rate', help='Learning rate for Z optimisation', type=float,
                         default=8e-3)
-
+    parser.add_argument('--devmode', dest='devmode', help='Used for development on local machine: changes modelpath.',
+                       action='store_true')
     if args is None:
         args = parser.parse_args()
     else:
@@ -68,7 +69,8 @@ def optimise(args):
     model_path = "experiments/style_{:d}".format(style_ix) + "/out_64/iterations_20000/decoder_size_1024/" + \
                  "zdim_{:d}".format(z_dim) + "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_2e-05/std/" + datafiles + \
                  "/not_residual_vel/model_{:d}".format(model_iternums)
-    # model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
+    if args.devmode:
+        model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
 
     # Load model
     load_args = ["--style_ix", str(style_ix), "--load", model_path,
@@ -97,14 +99,15 @@ def optimise(args):
     # Get test data
     print("Reading test data (test index {0:d}).".format(style_ix))
     if train_set_size > 0:
-        output_fname, input_fname, tstix_fname = map(lambda x: x + "_30fps_N{:d}.npz".format(train_set_size),
-                                                  ["edin_Ys", "edin_Us", "edin_ixs"])
+        output_fname, input_fname, tstix_fname = map(lambda x: x + "_N{:d}.npz".format(train_set_size),
+                                                  ["edin_Ys_30fps", "edin_Us_30fps", "edin_ixs_30fps_test"])
         test_ixs_all = np.load(os.path.join(data_dir, tstix_fname))[str(style_ix)]
 
         test_set_Y = np.load(os.path.join(data_dir, output_fname))
         test_set_U = np.load(os.path.join(data_dir, input_fname))
         test_set_Y = [test_set_Y[str(i)] for i in test_ixs_all]
         test_set_U = [test_set_U[str(i)] for i in test_ixs_all]
+        raise(Exception("This restricted dataset stuff is all a bit screwed. And anyway, need to re-do."))
     else:
         output_fname, input_fname = "edin_Ys_30fps_final.npz", "edin_Us_30fps_final.npz"
         style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
@@ -116,20 +119,20 @@ def optimise(args):
         test_set_Y = [all_data[i][0] for i in range(len(all_data))]
         test_set_U = [all_data[i][1] for i in range(len(all_data))]
 
+        # Determine which test examples we will use.
+        test_ixs = np.linspace(0, len(test_set_Y) - 1 - B_forward, test_set_size).round().astype('int')
+
     print("Using files {:s}; {:s}".format(input_fname, output_fname))
     print("done reading data.")
 
-    # Determine which test examples we will use.
-    _test_ixs = np.linspace(0, len(test_ixs_all)-1-B_forward, test_set_size).round().astype('int')
-    test_ixs = test_ixs_all[_test_ixs]
 
     # Create inputs/outputs for optimisation
-    ysz = test_set_Y[0].shape[0]
-    usz = test_set_U[0].shape[0]
+    ysz = test_set_Y[0].shape[1]
+    usz = test_set_U[0].shape[1]
     Yb, Ub = torch.zeros(test_set_size, 64, ysz).float(), torch.zeros(test_set_size, 64, usz).float()
     for i in range(test_set_size):
-        Ub[i, :, :] = test_set_U[test_ixs[i]]
-        Yb[i, :, :] = test_set_Y[test_ixs[i]]
+        Ub[i, :, :] = torch.from_numpy(test_set_U[test_ixs[i]])
+        Yb[i, :, :] = torch.from_numpy(test_set_Y[test_ixs[i]])
     if not iscpu:
         Ub.cuda()
         Yb.cuda()
@@ -161,7 +164,7 @@ def optimise(args):
             # Actual backpropagation
             step_loss.backward()
             optimiser.step()
-            i % 5 == 0 and print("step {:d}: {:02.3f}".format(i, step_loss.cpu().data.numpy()[1]))
+            i % 5 == 0 and print("step {:d}: {:02.3f}".format(i, step_loss.cpu().data.numpy()))
 
         print("Inner loop {:d}/{:d} took {:03.1f} seconds".format(j, len(iters), time.time() - start_time))
 
