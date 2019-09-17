@@ -72,6 +72,8 @@ def optimise(args):
     if args.devmode:
         model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
 
+    print("model: {:s}".format(model_path))
+    
     # Load model
     load_args = ["--style_ix", str(style_ix), "--load", model_path,
                  "--latent_k", str(z_dim), "--input_size", str(35)]
@@ -134,8 +136,8 @@ def optimise(args):
         Ub[i, :, :] = torch.from_numpy(test_set_U[test_ixs[i]])
         Yb[i, :, :] = torch.from_numpy(test_set_Y[test_ixs[i]])
     if not iscpu:
-        Ub.cuda()
-        Yb.cuda()
+        Ub = Ub.cuda()
+        Yb = Yb.cuda()
 
     # Generate initial Z and set-up for optimisation.
     Z = torch.randn(test_set_size, model.k).to(device)
@@ -170,7 +172,7 @@ def optimise(args):
 
         # Avoid local minima
         if j != len(iters) - 1:
-            cross_errors = np.zeros(test_set_size, test_set_size)
+            cross_errors = np.zeros((test_set_size, test_set_size))
             for i in range(test_set_size):
                 _Z = Z[i, :].repeat(test_set_size, 1)   # duplicate i'th particle for all sequences.
                 preds, _state = model(Ub, _Z, sd)
@@ -181,7 +183,7 @@ def optimise(args):
             choose_z = np.argmin(cross_errors, axis=1)
             Z.data = Z[choose_z, :].detach()
 
-    return Z.cpu.detach().numpy(), test_ixs
+    return Z.cpu().detach().numpy(), test_ixs
 
 
 if __name__ == "__main__":
