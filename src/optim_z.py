@@ -1,4 +1,4 @@
-import os, time
+import os, sys, time
 import argparse
 
 import learn_mtfixbmodel
@@ -66,7 +66,8 @@ def optimise(args):
     # Input transformations
     iscpu = device == "cpu"
     biasonly = model_type == "biasonly"
-    model_iternums = 20000 if train_set_size > 0 else model_iternums
+    is_mtl = train_set_size > 0
+    model_iternums = 20000 if is_mtl else model_iternums
 
     # Construct model path
     if len(args.model_path) == 0:
@@ -111,7 +112,7 @@ def optimise(args):
 
     # Get test data
     print("Reading test data (test index {0:d}).".format(style_ix))
-    if train_set_size > 0:
+    if is_mtl:
         input_fname_ = "edin_Us_30fps_variableN_test_seeds_{:d}.npz"
         output_fname_ = "edin_Ys_30fps_variableN_test_seeds_{:d}.npz"
         test_set_Y = [np.load(os.path.join(data_dir, output_fname_.format(i))) for i in range(1, 8+1)]
@@ -186,7 +187,7 @@ def optimise(args):
             # Actual backpropagation
             step_loss.backward()
             optimiser.step()
-            i % 5 == 0 and print("step {:d}: {:02.3f}".format(i, step_loss.cpu().data.numpy()))
+            i % 5 == 0 and print("step {:d}: {:02.3f}".format(i, step_loss.cpu().data.numpy())); sys.stdout.flush()
 
         print("Inner loop {:d}/{:d} took {:03.1f} seconds".format(j+1, len(iters), time.time() - start_time))
 
@@ -203,7 +204,10 @@ def optimise(args):
             choose_z = np.argmin(cross_errors, axis=1)
             Z.data = Z[choose_z, :].detach()
 
-    return Z.cpu().detach().numpy(), test_ixs
+    if is_mtl:
+        return Z.cpu().detach().numpy(), np.ones(1) * NaN
+    else:
+        return Z.cpu().detach().numpy(), test_ixs
 
 
 if __name__ == "__main__":
@@ -211,7 +215,6 @@ if __name__ == "__main__":
     Z, test_ixs = optimise(args)
     Ntype = "N{:d}".format(args.train_set_size) if args.train_set_size > 0 else "TL"
     savenm = "{:s}_{:s}_k{:d}_i{:d}".format(args.model_type, Ntype, args.k, args.style_ix)
-    savenm = savenm if args.train_set_size <= 0 else savenm + "_MTL_N{:d}".format(args.train_set_size)
     dir = os.path.join(args.data_dir, "optim_Z")
     os.makedirs(dir, exist_ok=True)
     np.savez(os.path.join(dir, savenm), Z)
