@@ -61,11 +61,12 @@ def optimise(args):
     assert device in ["cpu", "cuda"], "device must be 'cpu' or 'cuda'."
     assert train_set_size in [-1, 4, 8, 16, 32, 64]
     assert B_forward == 1, "cannot do LT prediction as not contiguous."
-    assert z_dim in [3, 5, 7]
+    assert z_dim in [3, 5, 7, 8]
 
     # Input transformations
     iscpu = device == "cpu"
     biasonly = model_type == "biasonly"
+    model_iternums = 20000 if train_set_size > 0 else model_iternums
 
     # Construct model path
     if len(args.model_path) == 0:
@@ -74,7 +75,7 @@ def optimise(args):
         model_path = "experiments/style_{:d}".format(9 if train_set_size > 0 else style_ix) + \
                      "/out_64/iterations_{:d}".format(model_iternums) + \
                      "/decoder_size_1024/zdim_{:d}".format(z_dim) + \
-                     "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_{:.0e}/std/".format(2e-5 if biasonly else 5e-5) + \
+                     "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_{:.0e}/std/".format(2e-5 if not biasonly else 5e-5) + \
                      datafiles + "/not_residual_vel/model_{:d}".format(model_iternums)
         if args.devmode:
             if model_type == "biasonly":
