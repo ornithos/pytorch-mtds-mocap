@@ -71,7 +71,7 @@ def optimise(args):
     if len(args.model_path) == 0:
         datafiles = "edin_Us_30fps_N{0:d}/edin_Ys_30fps_N{0:d}".format(train_set_size) if train_set_size > 0 else \
             "edin_Us_30fps_final/edin_Ys_30fps_final"
-        model_path = "experiments/style_{:d}".format(style_ix) + \
+        model_path = "experiments/style_{:d}".format(9 if train_set_size > 0 else style_ix) + \
                      "/out_64/iterations_{:d}".format(model_iternums) + \
                      "/decoder_size_1024/zdim_{:d}".format(z_dim) + \
                      "/ar_coef_0/psi_lowrank_30/optim_Adam/lr_{:.0e}/std/".format(2e-5 if biasonly else 5e-5) + \
@@ -81,8 +81,6 @@ def optimise(args):
                 model_path = "../../mocap-mtds/experiments/biasonly/style8_128_8e-4_k3_20000"
             else:
                 model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
-    else:
-        model_path = args.model_path
 
     print("model: {:s}".format(model_path))
 
@@ -113,15 +111,24 @@ def optimise(args):
     # Get test data
     print("Reading test data (test index {0:d}).".format(style_ix))
     if train_set_size > 0:
-        output_fname, input_fname, tstix_fname = map(lambda x: x + "_N{:d}.npz".format(train_set_size),
-                                                  ["edin_Ys_30fps", "edin_Us_30fps", "edin_ixs_30fps_test"])
-        test_ixs_all = np.load(os.path.join(data_dir, tstix_fname))[str(style_ix)]
+        input_fname_ = "edin_Us_30fps_variableN_test_seeds_{:d}.npz"
+        output_fname_ = "edin_Ys_30fps_variableN_test_seeds_{:d}.npz"
+        test_set_Y = [np.load(os.path.join(data_dir, output_fname_.format(i))) for i in range(1, 8+1)]
+        test_set_Y = [npz[str(j)] for npz in test_set_Y for j in range(1, 4+1)]
+        test_set_U = [np.load(os.path.join(data_dir, input_fname_.format(i))) for i in range(1, 8 + 1)]
+        test_set_U = [npz[str(j)] for npz in test_set_U for j in range(1, 4 + 1)]
 
-        test_set_Y = np.load(os.path.join(data_dir, output_fname))
-        test_set_U = np.load(os.path.join(data_dir, input_fname))
-        test_set_Y = [test_set_Y[str(i)] for i in test_ixs_all]
-        test_set_U = [test_set_U[str(i)] for i in test_ixs_all]
-        raise(Exception("This restricted dataset stuff is all a bit screwed. And anyway, need to re-do."))
+        # Create inputs/outputs for optimisation
+        ysz = test_set_Y[0].shape[1]
+        usz = test_set_U[0].shape[1]
+        bsz = 4 * 8   # each style has 4 seed sequences.
+        Yb, Ub = torch.zeros(bsz, 64, ysz).float(), torch.zeros(bsz, 64, usz).float()
+        for i in range(bsz):
+            Ub[i, :, :] = torch.from_numpy(test_set_U[i])
+            Yb[i, :, :] = torch.from_numpy(test_set_Y[i])
+
+        output_fname, input_fname = output_fname_.format(0), input_fname_.format(0)
+        test_set_size = bsz
     else:
         output_fname, input_fname = "edin_Ys_30fps_final.npz", "edin_Us_30fps_final.npz"
         style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
@@ -136,17 +143,17 @@ def optimise(args):
         # Determine which test examples we will use.
         test_ixs = np.linspace(0, len(test_set_Y) - 1 - B_forward, test_set_size).round().astype('int')
 
+        # Create inputs/outputs for optimisation
+        ysz = test_set_Y[0].shape[1]
+        usz = test_set_U[0].shape[1]
+        Yb, Ub = torch.zeros(test_set_size, 64, ysz).float(), torch.zeros(test_set_size, 64, usz).float()
+        for i in range(test_set_size):
+            Ub[i, :, :] = torch.from_numpy(test_set_U[test_ixs[i]])
+            Yb[i, :, :] = torch.from_numpy(test_set_Y[test_ixs[i]])
+
     print("Using files {:s}; {:s}".format(input_fname, output_fname))
     print("done reading data.")
 
-
-    # Create inputs/outputs for optimisation
-    ysz = test_set_Y[0].shape[1]
-    usz = test_set_U[0].shape[1]
-    Yb, Ub = torch.zeros(test_set_size, 64, ysz).float(), torch.zeros(test_set_size, 64, usz).float()
-    for i in range(test_set_size):
-        Ub[i, :, :] = torch.from_numpy(test_set_U[test_ixs[i]])
-        Yb[i, :, :] = torch.from_numpy(test_set_Y[test_ixs[i]])
     if not iscpu:
         Ub = Ub.cuda()
         Yb = Yb.cuda()
@@ -200,9 +207,10 @@ def optimise(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    Z, test_ixs = optimise(args)
+    # Z, test_ixs = optimise(args)
     Ntype = "N{:d}".format(args.train_set_size) if args.train_set_size > 0 else "TL"
     savenm = "{:s}_{:s}_k{:d}_i{:d}".format(args.model_type, Ntype, args.k, args.style_ix)
+    savenm = savenm if args.train_set_size <= 0 else savenm + "_MTL_N{:d}".format(args.train_set_size)
     dir = os.path.join(args.data_dir, "optim_Z")
     os.makedirs(dir, exist_ok=True)
     np.savez(os.path.join(dir, savenm), Z)
