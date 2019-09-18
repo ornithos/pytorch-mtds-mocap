@@ -207,7 +207,7 @@ def optimise(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    # Z, test_ixs = optimise(args)
+    Z, test_ixs = optimise(args)
     Ntype = "N{:d}".format(args.train_set_size) if args.train_set_size > 0 else "TL"
     savenm = "{:s}_{:s}_k{:d}_i{:d}".format(args.model_type, Ntype, args.k, args.style_ix)
     savenm = savenm if args.train_set_size <= 0 else savenm + "_MTL_N{:d}".format(args.train_set_size)
