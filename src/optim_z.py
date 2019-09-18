@@ -205,7 +205,7 @@ def optimise(args):
             Z.data = Z[choose_z, :].detach()
 
     if is_mtl:
-        return Z.cpu().detach().numpy(), np.ones(1) * NaN
+        return Z.cpu().detach().numpy(), np.ones(1) * np.NaN
     else:
         return Z.cpu().detach().numpy(), test_ixs
 
