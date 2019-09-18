@@ -29,6 +29,9 @@ def parse_args(args=None):
     parser.add_argument('--test_every', dest='test_every',
                         help='',
                         default=200, type=int)
+    parser.add_argument('--train_set_size', dest='train_set_size', type=int, default=-1,
+                        help='Number of training instances (length 64) per style')
+
     # Architecture
     parser.add_argument('--architecture', dest='architecture',
                         help='Seq2seq architecture to use: [basic, tied].',
@@ -77,6 +80,8 @@ def parse_args(args=None):
     parser.add_argument('--sample', dest='sample',
                         help='Set to True for sampling.', action='store_true',
                         default=False)
+    parser.add_argument('--stylelkp_fname', dest='stylelkp_fname', type=str,
+                        help="name of style_lkp file", default="styles_lkp.npz")
 
     if args is None:
         args = parser.parse_args()
@@ -96,6 +101,13 @@ def initial_arg_transform(args):
     if not os.path.isfile(os.path.join(args.data_dir, "styles_lkp.npz")):
         print("Moving datadir from {:s} => ../../mocap-mtds/data/".format(args.data_dir))
         args.data_dir = os.path.normpath("../../mocap-mtds/data/")
+
+    if not args.train_set_size == -1:
+        args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
+        args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
+    else:
+        args.input_fname = "edin_Us_30fps_final.npz"
+        args.output_fname = "edin_Ys_30fps_final.npz"
 
     args.train_dir = get_model_save_dir(args)
 

@@ -176,30 +176,30 @@ class Seq2SeqModelOpen(nn.Module):
         # Select entries at random
         probs = np.array([y.shape[0] for y in data_Y])
         probs = probs / probs.sum()
+        bsz = self.batch_size if not stratify else len(data_Y)
+
         if not stratify:
-            chosen_keys = np.random.choice(len(data_Y), self.batch_size, p=probs)
-            bsz = self.batch_size
+            chosen_keys = np.random.choice(len(data_Y), bsz, p=probs)
         else:
-            bsz = len(data_Y)
             chosen_keys = list(range(bsz))
 
         # How many frames in total do we need?
         total_frames = self.source_seq_len + self.target_seq_len
         traj_size = data_U[1].shape[1]
 
-        encoder_inputs = np.zeros((self.batch_size, self.source_seq_len - 1, self.input_size), dtype=float)
-        decoder_inputs = np.zeros((self.batch_size, self.target_seq_len, self.input_size), dtype=float)
-        decoder_outputs = np.zeros((self.batch_size, self.target_seq_len, self.HUMAN_SIZE), dtype=float)
+        encoder_inputs = np.zeros((bsz, self.source_seq_len - 1, self.input_size), dtype=float)
+        decoder_inputs = np.zeros((bsz, self.target_seq_len, self.input_size), dtype=float)
+        decoder_outputs = np.zeros((bsz, self.target_seq_len, self.HUMAN_SIZE), dtype=float)
 
         for i in xrange(bsz):
             the_key = chosen_keys[i]
 
             # Get the number of frames
             n = data_Y[the_key].shape[0]
-            assert n > total_frames, "n of file {:s} too small.".format(the_key)
+            assert n >= total_frames, "n of file {:d} too small.".format(the_key)
 
             # Sample somewherein the middle
-            idx = np.random.randint(1, n - total_frames)
+            idx = np.random.randint(0, n - total_frames) if n > total_frames else 0
 
             # Select the data around the sampled points
             data_Y_sel = data_Y[the_key][idx:idx + total_frames, :]

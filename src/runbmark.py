@@ -74,8 +74,7 @@ def train(args):
 
     actions = define_actions(args.action)
 
-    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(
-        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix)
+    train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(args)
 
     # Limit TF to take a fraction of the GPU memory
 
@@ -296,59 +295,60 @@ def define_actions(action):
     raise (ValueError, "Unrecognized action: %d" % action)
 
 
-def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
-    """
-    Loads data for training/testing and normalizes it.
-
-    Args
-      actions: list of strings (actions) to load
-      seq_length_in: number of frames to use in the burn-in sequence
-      seq_length_out: number of frames to use in the output sequence
-      data_dir: directory to load the data from
-      one_hot: whether to use one-hot encoding per action
-    Returns
-      train_set: dictionary with normalized training data
-      test_set: dictionary with test data
-      data_mean: d-long vector with the mean of the training data
-      data_std: d-long vector with the standard dev of the training data
-      dim_to_ignore: dimensions that are not used becaused stdev is too small
-      dim_to_use: dimensions that we are actually using in the model
-    """
+def read_all_data(args):
 
     # === Read training data ===
     print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
-        seq_length_in, seq_length_out))
+        args.seq_length_in, args.seq_length_out))
 
-    pct_train = 0.875
-    style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
-    style_ixs = set(range(1, 9)) - {style_ix}
+    style_ixs = set(range(1, 9)) - {args.style_ix}
+    style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
 
-    load_Y = np.load(os.path.join(data_dir, "edin_Ys_30fps_final.npz"))
-    load_U = np.load(os.path.join(data_dir, "edin_Us_30fps_final.npz"))
+    load_Y = np.load(os.path.join(args.data_dir, args.output_fname))
+    load_U = np.load(os.path.join(args.data_dir, args.input_fname))
 
-    train_ix_end = np.floor([sum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) * pct_train for j in style_ixs])
-    train_ix_end = train_ix_end.astype('int')
-    train_len_cum = [np.cumsum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) for j in style_ixs]
+    if args.train_set_size == -1:
+        pct_train = 0.875
 
-    train_set_Y, train_set_U, valid_set_Y, valid_set_U = [], [], [], []
-    for j, e, cumsumlens in zip(style_ixs, train_ix_end, train_len_cum):
-        found_breakpt = False
-        cum_prv = 0
-        for i, cuml in enumerate(cumsumlens):
-            load_ix = str(style_lkp[str(j)][i])
-            if cuml < e:
-                train_set_Y.append(load_Y[load_ix])
-                train_set_U.append(load_U[load_ix])
-                cum_prv = cuml
-            elif not found_breakpt:
-                train_set_Y.append(load_Y[load_ix][:e - cum_prv, :])
-                train_set_U.append(load_U[load_ix][:e - cum_prv, :])
-                valid_set_Y.append(load_Y[load_ix][e - cum_prv:, :])
-                valid_set_U.append(load_U[load_ix][e - cum_prv:, :])
-                found_breakpt = True
-            else:
-                valid_set_Y.append(load_Y[load_ix])
-                valid_set_U.append(load_U[load_ix])
+        train_ix_end = np.floor([sum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) * pct_train for j in style_ixs])
+        train_ix_end = train_ix_end.astype('int')
+        train_len_cum = [np.cumsum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) for j in style_ixs]
+
+        train_set_Y, train_set_U, valid_set_Y, valid_set_U = [], [], [], []
+        for j, e, cumsumlens in zip(style_ixs, train_ix_end, train_len_cum):
+            found_breakpt = False
+            cum_prv = 0
+            for i, cuml in enumerate(cumsumlens):
+                load_ix = str(style_lkp[str(j)][i])
+                if cuml < e:
+                    train_set_Y.append(load_Y[load_ix])
+                    train_set_U.append(load_U[load_ix])
+                    cum_prv = cuml
+                elif not found_breakpt:
+                    train_set_Y.append(load_Y[load_ix][:e - cum_prv, :])
+                    train_set_U.append(load_U[load_ix][:e - cum_prv, :])
+                    valid_set_Y.append(load_Y[load_ix][e - cum_prv:, :])
+                    valid_set_U.append(load_U[load_ix][e - cum_prv:, :])
+                    found_breakpt = True
+                else:
+                    valid_set_Y.append(load_Y[load_ix])
+                    valid_set_U.append(load_U[load_ix])
+    else:
+        train_set_Y, train_set_U = [], []
+        num_each = args.train_set_size // 4
+        step = args.train_set_size
+        for i in np.sort(list(style_ixs)):
+            train_set_Y.append(np.concatenate([load_Y[str((i-1) * step + j + 1)] for j in range(num_each)], axis=0))
+            train_set_U.append(np.concatenate([load_U[str((i-1) * step + j + 1)] for j in range(num_each)], axis=0))
+
+        valid_Y = np.load(os.path.join(args.data_dir, "edin_Ys_30fps_variableN_test_valids_all.npz"))
+        valid_U = np.load(os.path.join(args.data_dir, "edin_Us_30fps_variableN_test_valids_all.npz"))
+        valid_set_Y, valid_set_U = [], []
+        num_valid_each = 4
+        for i in np.sort(list(style_ixs)):
+            for j in range(num_valid_each):
+                valid_set_Y.append(valid_Y[str((i-1) * num_valid_each + j + 1)])
+                valid_set_U.append(valid_U[str((i-1) * num_valid_each + j + 1)])
 
     print("done reading data.")
 

@@ -36,7 +36,7 @@ def parse_args(args=None):
     parser.add_argument('--hard_em_iters', dest='hard_em_iters', type=int,
                         help='Number of iterations to perform hard EM (hold z sigma at small constant)')
     parser.add_argument('--train_set_size', dest='train_set_size', type=int,
-                        help='Number of training instances (length 64) per ')
+                        help='Number of training instances (length 64) per style')
 
     # Architecture
     parser.add_argument('--no_residual_velocities', dest='residual_velocities',
