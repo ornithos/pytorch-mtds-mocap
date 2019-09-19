@@ -80,7 +80,7 @@ def optimise(args):
                      datafiles + "/not_residual_vel/model_{:d}".format(model_iternums)
         if args.devmode:
             if model_type == "biasonly":
-                model_path = "../../mocap-mtds/experiments/biasonly/style8_128_8e-4_k3_20000"
+                model_path = "../../mocap-mtds/experiments/mtl/biasonly_k{:d}_N{:d}_20000".format(z_dim, train_set_size)
             else:
                 model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
 
@@ -161,7 +161,9 @@ def optimise(args):
         Yb = Yb.cuda()
 
     # Generate initial Z and set-up for optimisation.
-    Z = torch.randn(test_set_size, model.k).to(device)
+    zixs = list(range(0, train_set_size*8, train_set_size // 4))
+    Z = model.mt_net.Z_mu[zixs, :].detach().to(device)
+
     Z.requires_grad = True
     sd = torch.ones_like(Z).float().to(device) * 1e-7
     pars = [{'params': [Z], 'lr': lr}]
@@ -172,6 +174,18 @@ def optimise(args):
     else:
         iters = [750, 500, 200]
     optimiser = optim.Adam(pars, betas=(0.9, 0.999), weight_decay=0)
+
+    # Assign Z to best test ixs
+    cross_errors = np.zeros((test_set_size, test_set_size))
+    for i in range(test_set_size):
+        _Z = Z[i, :].repeat(test_set_size, 1)  # duplicate i'th particle for all sequences.
+        preds, _state = model(Ub, _Z, sd)
+        err = (preds - Yb)
+        sqerr = err.pow(2)
+        cross_errors[:, i] = sqerr.mean(dim=2).mean(dim=1).cpu().detach().numpy()
+
+    choose_z = np.argmin(cross_errors, axis=1)
+    Z.data = Z[choose_z, :].detach()
 
     # Perform optimisation
     for j in range(len(iters)):
