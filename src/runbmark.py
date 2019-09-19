@@ -89,7 +89,7 @@ def train(args):
         if len(args.load) > 0:
             Exception("Training from load file not supported in this file.")
 
-        previous_losses = []
+        previous_losses, val_losses, save_ixs = [], [], []
 
         step_time, loss = 0, 0
         if args.optimiser.upper() == 'SGD':
@@ -207,11 +207,18 @@ def train(args):
 
                 print()
                 previous_losses.append(loss)
+                val_losses.append(val_loss)
+                save_ixs.append(current_step)
 
                 # Reset global time and loss
                 step_time, loss = 0, 0
 
                 sys.stdout.flush()
+
+        best_step = save_ixs[np.argmin(val_losses)]
+        best_model = torch.load(args.train_dir + '/model_' + str(best_step))
+        print("<><><><><><><><><><><><><>\nBest model is at step: {:d}.\n<><><><><><><><><><><><><>\n".formt(best_step))
+        torch.save(best_model, args.train_dir + '/model_best')
 
 
 def sample(args):
