@@ -217,7 +217,7 @@ def train(args):
 
         best_step = save_ixs[np.argmin(val_losses)]
         best_model = torch.load(args.train_dir + '/model_' + str(best_step))
-        print("<><><><><><><><><><><><><>\nBest model is at step: {:d}.\n<><><><><><><><><><><><><>\n".formt(best_step))
+        print("><><><><><><><><><><><><>\nBest model is at step: {:d}.\n><><><><><><><><><><><><>\n".format(best_step))
         torch.save(best_model, args.train_dir + '/model_best')
 
 

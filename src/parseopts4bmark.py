@@ -127,5 +127,6 @@ def get_model_save_dir(args):
                   'size_{0}'.format(args.size),
                   'lr_{0}'.format(args.learning_rate),
                   'residual_vel' if args.residual_velocities else 'not_residual_vel',
-                  'train_{0}'.format('all' if args.train_set_size == -1 else args.train_set_size))
+                  'train_{0}'.format('all' if args.train_set_size == -1 else args.train_set_size),
+                  'open_loop' if not args.open_loop else 'closed_loop'    # note labels are wrong way in code!
                   )
