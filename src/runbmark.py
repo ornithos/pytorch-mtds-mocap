@@ -342,8 +342,15 @@ def read_all_data(args):
                     valid_set_U.append(load_U[load_ix])
     else:
         train_set_Y, train_set_U = [], []
-        num_each = args.train_set_size // 4
-        step = args.train_set_size
+        if args.train_set_size == 4:
+            step = 8
+            num_each = 4
+            load_Y = np.load(os.path.join(args.data_dir, args.output_fname.replace('4', '8')))
+            load_U = np.load(os.path.join(args.data_dir, args.input_fname.replace('4', '8')))
+        else:
+            num_each = args.train_set_size
+            step = args.train_set_size
+
         for i in np.sort(list(style_ixs)):
             train_set_Y.append(np.concatenate([load_Y[str((i-1) * step + j + 1)] for j in range(num_each)], axis=0))
             train_set_U.append(np.concatenate([load_U[str((i-1) * step + j + 1)] for j in range(num_each)], axis=0))
