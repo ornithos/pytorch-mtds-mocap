@@ -199,7 +199,9 @@ def get_model_save_dir(args):
                                          '{0}'.format("archDD" if args.dynamicsdict else "std"),
                                          '{0}'.format(args.input_fname.split(".")[0]),
                                          '{0}'.format(args.output_fname.split(".")[0]),
-                                         'residual_vel' if args.residual_velocities else 'not_residual_vel'))
+                                         'residual_vel' if args.residual_velocities else 'not_residual_vel',
+                                         '{0}'.format('no_mt_bias' if args.nobias else 'biasonly' \
+                                                      if args.biasonly else 'full_mtds')))
 
 
 class _dictNamespace(object):
