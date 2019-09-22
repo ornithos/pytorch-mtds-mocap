@@ -83,6 +83,8 @@ def optimise(args):
                 model_path = "../../mocap-mtds/experiments/mtl/biasonly_k{:d}_N{:d}_20000".format(z_dim, train_set_size)
             else:
                 model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
+    else:
+        model_path = args.model_path
 
     print("model: {:s}".format(model_path))
 

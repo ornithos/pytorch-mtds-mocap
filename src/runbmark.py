@@ -355,8 +355,8 @@ def read_all_data(args):
 
         for i in np.sort(list(style_ixs)):
             for j in range(num_areas):
-                train_set_Y.append(np.concatenate([load_Y[str((i-1) * step + j*4 + l + 1)] for l in range(num_each)], axis=0))
-                train_set_U.append(np.concatenate([load_U[str((i-1) * step + j*4 + l + 1)] for l in range(num_each)], axis=0))
+                train_set_Y.append(np.concatenate([load_Y[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
+                train_set_U.append(np.concatenate([load_U[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
 
         valid_Y = np.load(os.path.join(args.data_dir, "edin_Ys_30fps_variableN_test_valids_all.npz"))
         valid_U = np.load(os.path.join(args.data_dir, "edin_Us_30fps_variableN_test_valids_all.npz"))
