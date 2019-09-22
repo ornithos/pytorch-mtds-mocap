@@ -308,7 +308,7 @@ def read_all_data(args):
     print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
         args.seq_length_in, args.seq_length_out))
 
-    style_ixs = set(range(1, 9)) - {args.style_ix}
+    style_ixs = set(range(1, 9)) - {args.style_ix} if not args.stl else {args.style_ix}
     style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
 
     load_Y = np.load(os.path.join(args.data_dir, args.output_fname))

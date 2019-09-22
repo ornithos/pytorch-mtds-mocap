@@ -31,6 +31,8 @@ def parse_args(args=None):
                         default=200, type=int)
     parser.add_argument('--train_set_size', dest='train_set_size', type=int, default=-1,
                         help='Number of training instances (length 64) per style')
+    parser.add_argument('--stl', dest='stl', help='Single Task Learning: Learn only a model for chosen style',
+                        action='store_true')
 
     # Architecture
     parser.add_argument('--architecture', dest='architecture',
