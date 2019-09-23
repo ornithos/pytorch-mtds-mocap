@@ -59,20 +59,23 @@ def optimise(args):
     # Input checks
     assert model_type in ["biasonly", "no_mt_bias"]
     assert device in ["cpu", "cuda"], "device must be 'cpu' or 'cuda'."
-    assert train_set_size in [-1, 4, 8, 16, 32, 64]
+    assert train_set_size in [-1, 0, 4, 8, 16, 32, 64]
     assert B_forward == 1, "cannot do LT prediction as not contiguous."
     assert z_dim in [3, 5, 7, 8]
 
     # Input transformations
     iscpu = device == "cpu"
     biasonly = model_type == "biasonly"
-    is_mtl = train_set_size > 0
+    is_mtl = train_set_size >= 0
     model_iternums = 20000 if is_mtl else model_iternums
 
     # Construct model path
     if len(args.model_path) == 0:
-        datafiles = "edin_Us_30fps_N{0:d}/edin_Ys_30fps_N{0:d}".format(train_set_size) if train_set_size > 0 else \
-            "edin_Us_30fps_final/edin_Ys_30fps_final"
+        if args.train_set_size > 0:
+            datafiles = "edin_Us_30fps_N{0:d}/edin_Ys_30fps_N{0:d}".format(train_set_size) if train_set_size > 0 else \
+                "edin_Us_30fps_final/edin_Ys_30fps_final"
+        else:
+            datafiles = "edin_Us_30fps_variableN_test_complement/edin_Ys_30fps_variableN_test_complement"
         model_path = "experiments/style_{:d}".format(9 if train_set_size > 0 else style_ix) + \
                      "/out_64/iterations_{:d}".format(model_iternums) + \
                      "/decoder_size_1024/zdim_{:d}".format(z_dim) + \
@@ -82,7 +85,8 @@ def optimise(args):
             if model_type == "biasonly":
                 model_path = "../../mocap-mtds/experiments/mtl/biasonly_k{:d}_N{:d}_20000".format(z_dim, train_set_size)
             else:
-                model_path = "../../mocap-mtds/experiments/nobias/style8_k7_40000"
+                # print(os.getcwd())
+                model_path = "../../mocap-mtds/experiments/mtl/fa/k{:d}_N{:d}_fullmtds_20000".format(z_dim, train_set_size)
     else:
         model_path = args.model_path
 
@@ -163,7 +167,8 @@ def optimise(args):
         Yb = Yb.cuda()
 
     # Generate initial Z and set-up for optimisation.
-    zixs = list(range(0, train_set_size*8, train_set_size // 4))
+    n_per_style = 120 if train_set_size == 0 else train_set_size
+    zixs = list(range(0, n_per_style*8, n_per_style // 4))
     Z = model.mt_net.Z_mu[zixs, :].detach().to(device)
 
     Z.requires_grad = True
