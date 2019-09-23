@@ -368,12 +368,16 @@ def read_all_data(args):
                     valid_set_U.append(load_U[load_ix])
     else:
         if args.train_set_size == 0:
-            assert not args.style_ix in range(1,9), "style_ix cannot be specified if using test complement. ('N=0')"
             # Maximal training set size, leaving the test set out.
             train_set_Y = [load_Y[str(i + 1)] for i in range(len(load_Y))]
             train_set_U = [load_U[str(i + 1)] for i in range(len(load_U))]
+            if args.style_ix in range(1, 9):
+                sel_ixs = [slice(0, 8), slice(8, 15), slice(15, 21), slice(21, 29), slice(29, 37),
+                           slice(37, 45), slice(45, 52), slice(52, 59)][args.style_ix]
+                train_set_Y, train_set_U = train_set_Y[sel_ixs], train_set_U[sel_ixs]
             train_set_Y = list(filter(lambda y: y.shape[0] >= 128, train_set_Y))
             train_set_U = list(filter(lambda u: u.shape[0] >= 128, train_set_U))
+
         else:
             train_set_Y, train_set_U = [], []
             if args.train_set_size == 4:
