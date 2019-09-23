@@ -418,10 +418,15 @@ def read_all_data(args):
     train_set_U = np.load(os.path.join(args.data_dir, args.input_fname))
     njoints = train_set_Y[str(0)].shape[1] if njoints <= 0 else njoints
 
-    train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, len(style_lkp.keys()) + 1) if
-                                i != args.style_ix])  # CAREFUL: jl is 1-based!
-    train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
-    train_set_U = [train_set_U[str(i)] for i in train_ixs]
+    if args.train_set_size != 0:
+        train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, len(style_lkp.keys()) + 1) if
+                                    i != args.style_ix])  # CAREFUL: jl is 1-based!
+        train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
+        train_set_U = [train_set_U[str(i)] for i in train_ixs]
+    else:
+        assert args.style_ix not in range(1, 9), "no support for LOO experiments with max MTL data yet. Use style_ix=9"
+        train_set_Y = [train_set_Y[str(i+1)][:, :njoints] for i in range(len(train_set_Y))]
+        train_set_U = [train_set_U[str(i+1)] for i in range(len(train_set_U))]
 
     print("Using files {:s}; {:s}".format(args.input_fname, args.output_fname))
     print("done reading data.")

@@ -157,8 +157,14 @@ def initial_arg_transform(args):
 
     if not args.train_set_size == -1:
         assert not args.data_augmentation, "cannot do data augmentation and variable training set size."
-        args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
-        args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
+        if args.train_set_size > 0:
+            args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
+            args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
+        elif args.train_set_size == 0:
+            args.input_fname = "edin_Us_30fps_variableN_test_complement.npz"
+            args.output_fname = "edin_Ys_30fps_variableN_test_complement.npz"
+        else:
+            raise Exception("train_set_size must be >= -1.")
 
     args.train_dir = get_model_save_dir(args)
 
