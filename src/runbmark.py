@@ -373,7 +373,7 @@ def read_all_data(args):
             train_set_U = [load_U[str(i + 1)] for i in range(len(load_U))]
             if args.style_ix in range(1, 9):
                 sel_ixs = [slice(0, 8), slice(8, 15), slice(15, 21), slice(21, 29), slice(29, 37),
-                           slice(37, 45), slice(45, 52), slice(52, 59)][args.style_ix]
+                           slice(37, 45), slice(45, 52), slice(52, 59)][args.style_ix-1]
                 train_set_Y, train_set_U = train_set_Y[sel_ixs], train_set_U[sel_ixs]
             train_set_Y = list(filter(lambda y: y.shape[0] >= 128, train_set_Y))
             train_set_U = list(filter(lambda u: u.shape[0] >= 128, train_set_U))
