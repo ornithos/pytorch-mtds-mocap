@@ -57,7 +57,7 @@ def optimise(args):
     # ---------------------------------------------------------------------------------------------------------------------
 
     # Input checks
-    assert model_type in ["biasonly", "no_mt_bias"]
+    assert model_type in ["biasonly", "no_mt_bias", "full_mtds"]
     assert device in ["cpu", "cuda"], "device must be 'cpu' or 'cuda'."
     assert train_set_size in [-1, 0, 4, 8, 16, 32, 64]
     assert B_forward == 1, "cannot do LT prediction as not contiguous."
@@ -179,7 +179,7 @@ def optimise(args):
     if biasonly:
         iters = [1000, 1000, 1000]
     else:
-        iters = [750, 500, 200]
+        iters = [400, 200, 100]
     optimiser = optim.Adam(pars, betas=(0.9, 0.999), weight_decay=0)
 
     # Assign Z to best test ixs
