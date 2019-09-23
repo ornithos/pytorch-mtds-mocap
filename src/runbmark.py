@@ -303,7 +303,33 @@ def define_actions(action):
 
 
 def read_all_data(args):
+    """
+    read_all_data
+    :param args: command line arguments processed by parseopts4bmark.
+    :return: train_set_Y, train_set_U, valid_set_Y, valid_set_U
 
+    ---------------------------------------------------------------------------------------------
+    ** NOTE THAT parseopts4bmark.py WILL CHANGE THE INPUT DATA SOURCES:
+       - output_fname
+       - input_fname
+    BASED ON SOME OF THE COMMAND LINE ARGS, AND HENCE SOME PROCESSING OCCURS PRIOR TO THIS FN. **
+    ---------------------------------------------------------------------------------------------
+
+    This function is a little more complex than might be desired, primarily in order to respect sequence boundaries.
+    Furthermore, it is handling various experiments, detailed below with their associated `args`.
+
+    In most cases, the `style_ix` is specified via args.style_ix. Unless specified, this is interpreted as the style to
+    leave out, unless `args.stl == True`, in which case it is the only style that is used. However, currently the case
+    `train_set_size == 0` does not allow specification of style_ix (except outside of 1:8, i.e., not specified).
+
+    * train_set_size == -1:  This condition means "use all the data". No subsampling is happening as in the case of MTL.
+                             Here, the function accesses the original data sequences and chops them up, with a 12.5%
+                             stratified validation sample.
+    * train_set_size == 2^n: (for n in 2:6). This is the MTL mode, where the subset of the data is pre-specified in
+                             `2_preprocess.ipynb` in the `mocap_mtds` project. If n=2, the subsets are too short to
+                             perform encoding and decoding, so the data are split in a different way.
+    * train_set_size == 0:   This is the maximal training set size for MTL, being the complement of the MTL test set.
+    """
     # === Read training data ===
     print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
         args.seq_length_in, args.seq_length_out))
@@ -341,22 +367,30 @@ def read_all_data(args):
                     valid_set_Y.append(load_Y[load_ix])
                     valid_set_U.append(load_U[load_ix])
     else:
-        train_set_Y, train_set_U = [], []
-        if args.train_set_size == 4:
-            step = 8
-            num_each = 2
-            num_areas = 2
-            load_Y = np.load(os.path.join(args.data_dir, args.output_fname.replace('4', '8')))
-            load_U = np.load(os.path.join(args.data_dir, args.input_fname.replace('4', '8')))
+        if args.train_set_size == 0:
+            assert not args.style_ix in range(1,9), "style_ix cannot be specified if using test complement. ('N=0')"
+            # Maximal training set size, leaving the test set out.
+            train_set_Y = [load_Y[str(i + 1)] for i in range(len(load_Y))]
+            train_set_U = [load_U[str(i + 1)] for i in range(len(load_U))]
+            train_set_Y = list(filter(lambda y: y.shape[0] >= 128, train_set_Y))
+            train_set_U = list(filter(lambda u: u.shape[0] >= 128, train_set_U))
         else:
-            num_each = args.train_set_size // 4
-            step = args.train_set_size
-            num_areas = 4
+            train_set_Y, train_set_U = [], []
+            if args.train_set_size == 4:
+                step = 8
+                num_each = 2
+                num_areas = 2
+                load_Y = np.load(os.path.join(args.data_dir, args.output_fname.replace('4', '8')))
+                load_U = np.load(os.path.join(args.data_dir, args.input_fname.replace('4', '8')))
+            else:
+                num_each = args.train_set_size // 4
+                step = args.train_set_size
+                num_areas = 4
 
-        for i in np.sort(list(style_ixs)):
-            for j in range(num_areas):
-                train_set_Y.append(np.concatenate([load_Y[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
-                train_set_U.append(np.concatenate([load_U[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
+            for i in np.sort(list(style_ixs)):
+                for j in range(num_areas):
+                    train_set_Y.append(np.concatenate([load_Y[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
+                    train_set_U.append(np.concatenate([load_U[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
 
         valid_Y = np.load(os.path.join(args.data_dir, "edin_Ys_30fps_variableN_test_valids_all.npz"))
         valid_U = np.load(os.path.join(args.data_dir, "edin_Us_30fps_variableN_test_valids_all.npz"))

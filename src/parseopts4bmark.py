@@ -95,6 +95,7 @@ def parse_args(args=None):
     assert args.omit_one_hot, "not implemented yet"
     assert args.action == "walking", "not implemented yet"
     assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
+    assert (not args.stl) or args.style_ix in range(1, 9), "style_ix must be in 1:8 if running STL."
 
     return args
 
@@ -104,12 +105,15 @@ def initial_arg_transform(args):
         print("Moving datadir from {:s} => ../../mocap-mtds/data/".format(args.data_dir))
         args.data_dir = os.path.normpath("../../mocap-mtds/data/")
 
-    if not args.train_set_size == -1:
-        args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
-        args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
-    else:
+    if args.train_set_size == -1:
         args.input_fname = "edin_Us_30fps_final.npz"
         args.output_fname = "edin_Ys_30fps_final.npz"
+    elif args.train_set_size == 0:
+        args.input_fname = "edin_Us_30fps_variableN_test_complement_stitched.npz"
+        args.output_fname = "edin_Ys_30fps_variableN_test_complement_stitched.npz"
+    else:
+        args.input_fname = "edin_Us_30fps_N{:d}.npz".format(args.train_set_size)
+        args.output_fname = "edin_Ys_30fps_N{:d}.npz".format(args.train_set_size)
 
     args.train_dir = get_model_save_dir(args)
 
