@@ -1,7 +1,7 @@
 
 ## Human Motion Prediction using Multi-Task Dynamical System
 
-This repo started life via the PyTorch clone of the Martinez et al. (2018) model.<sup>[[1]](#JuliaFootnote)</sup> Note that the PyTorch clone keeps a lot of the command line options of the original codebase but silently removes the features -- I think the codebase here therefore suffers from some of the same problems --  caveat emptor. A major problem with the library as it stands is that I'm unable to obtain the final scripts used to execute the code as these were run locally from my development machine which I haven't had access to in 9 months due to the Covid pandemic. There has been strictly no access granted since March 2020 and I'm writing as of December 2020. I'm therefore only able to guide in the right direction.
+This repo started life via the [PyTorch clone](https://github.com/enriccorona/human-motion-prediction-pytorch) of the Martinez et al. (2018) model by [Enric Corona](https://github.com/enriccorona).<sup>[[1]](#JuliaRepoFootnote)</sup> Note that the PyTorch clone keeps a lot of the command line options of the original codebase but silently removes the features -- I think the codebase here therefore suffers from some of the same problems --  caveat emptor. A major problem with the library as it stands is that I'm unable to obtain the final scripts used to execute the code as these were run locally from my development machine which I haven't had access to in 9 months due to the Covid pandemic. There has been strictly no access granted since March 2020 and I'm writing as of December 2020. I'm therefore only able to guide in the right direction.
 
 ### Data
 
@@ -31,3 +31,7 @@ The `style_ix` flag specifies the style index of the test set; i.e. to be held-o
 
 Again, Ian Mason uses Unity - I've hacked a bunch of utilities together in Julia to visualize the result in the browser. These make use of [`three.js`](https://threejs.org/) and [`MeshCat.jl`](https://github.com/rdeits/MeshCat.jl).
 
+
+#### Footnote
+
+<a name="#JuliaRepoFootnote">[1]</a>: The work began originally in [mocap-mtds](https://github.com/ornithos/mocap-mtds), a Julia project. The thinking was that in using PyTorch I could take advantage of hitting CuDNN kernels that were not yet plumbed in in Julia. From talking with Mike Innes, I was actually incorrect in thinking this; and moreover, the MTDS cannot take advantage of these anyway (to the best of my knowledge), as the parameters must be back-propped too. So the existence of this Python project is more of a historical curiosity rather than a necessity.
