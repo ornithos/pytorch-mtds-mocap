@@ -11,13 +11,13 @@ This repo started life via the PyTorch clone of the Martinez et al. (2018) model
 
 ### Training
 
-To train the model, I recommend using the two-layer architecture we describe in our upcoming paper. This uses a 1024-hidden-unit GRU as the first layer, and a multi-task 128-hidden-unit RNN (MTDS) in the second. We fix the dynamic bias _b_ of the MTDS in order to permit smooth interpolation between styles. This can be achieved using the `src/learn_mtfixbmodel.py` file: have a look at the options using `python learn_mtfixbmodel.py -h`. The default values have been extracted from the `argparse` code and stashed in the `src/default.ini` file. I recommend having a look at this to see reasonable values of the parameters which were used in the experiments, including the architecture hyperparameters. A value of `-1` in this file indicates that a default is derived from other args in the code if not specified. Note that the *h\_phi* generator network here is confusingly referred to as `psi` - a metonym, but using a different letter for the parameter than the new paper (which uses `phi`).
+I describe here how to train the model using the two-layer architecture we describe in our upcoming paper. This uses a 1024-hidden-unit GRU as the first layer, and a multi-task 128-hidden-unit RNN (MTDS) in the second. We fix the dynamic bias _b_ of the MTDS in order to permit smooth interpolation between styles. This can be achieved using the `src/learn_mtfixbmodel.py` file: have a look at the options using `python learn_mtfixbmodel.py -h`. The default values have been extracted from the `argparse` code and stashed in the `src/default.ini` file. I recommend having a look at this to see reasonable values of the parameters which were used in the experiments, including the architecture hyperparameters. A value of `-1` in this file indicates that a default is derived from other args in the code if not specified. Note that the *h\_phi* generator network here is confusingly referred to as `psi` - a metonym, but using a different letter for the parameter than the new paper (which uses `phi`).
 
 
-To train a model over all 
+To train a model over all styles, using the described architecture, run the following command from the command line:
 ```bash
 python src/learn_mtfixbmodel.py --style_ix 99 --latent_k 7 --input_size 64 --bottleneck 24 --iterations 20000 --hard_em_iters 10000 \
-  --learning_rate 3e-5 --learning_rate_mt 1e-3 --learning_rate_z 1e-3 --psi_affine
+  --learning_rate 3e-5 --learning_rate_mt 1e-3 --learning_rate_z 1e-3 --psi_affine --data_dir <data_path>
 ```
 
 The `style_ix` flag specifies the style index of the test set; i.e. to be held-out for the LOO experiments. If no data are to be held out (e.g. for style transfer purposes), then specify a number greater than 8 (a sensible default I used was 99). Other useful flags include:
@@ -27,7 +27,7 @@ The `style_ix` flag specifies the style index of the test set; i.e. to be held-o
 --data_dir     # specify the directory in which to find the Us, Ys, and style_lkp
 ```
 
-## Visualization
+### Visualization
 
 Again, Ian Mason uses Unity - I've hacked a bunch of utilities together in Julia to visualize the result in the browser. These make use of [`three.js`](https://threejs.org/) and [`MeshCat.jl`](https://github.com/rdeits/MeshCat.jl).
 
