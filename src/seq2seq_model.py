@@ -174,6 +174,8 @@ class Seq2SeqModel(nn.Module):
 
       # Get the number of frames
       n = data_Y[the_key].shape[0]
+      if n < total_frames:
+        how_did_we_get_here = 1
       assert n >= total_frames, "n of file {:d} too small.".format(the_key)
 
       # Sample somewherein the middle
