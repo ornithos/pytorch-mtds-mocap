@@ -1,128 +1,33 @@
 
-## Human Motion Prediction using Martinez et al. model
+## Human Motion Prediction using Multi-Task Dynamical System
 
-Fork => use for locomotion style data from Mason et al. 2018 (Few shot learning).
+This repo started life via the PyTorch clone of the Martinez et al. (2018) model.<sup>[[1]](#JuliaFootnote)</sup> Note that the PyTorch clone keeps a lot of the command line options of the original codebase but silently removes the features -- I think the codebase here therefore suffers from some of the same problems --  caveat emptor. A major problem with the library as it stands is that I'm unable to obtain the final scripts used to execute the code as these were run locally from my development machine which I haven't had access to in 9 months due to the Covid pandemic. There has been strictly no access granted since March 2020 and I'm writing as of December 2020. I'm therefore only able to guide in the right direction.
 
-While the pytorch fork of Martinez' original code quietly removes some features (e.g. the option of residual layer; this is now always on, despite the argument. Make sure the args are plumbed in before you use them!), I've bluntly destroyed a lot more. Actions are ignored, and one-hot inputs are also not currently present. Hence I highly highly recommend you following the fork back to the original code, or at least the pytorch version. Nevertheless, the following commands apparently work:
+### Data
 
-#### Train:
+**The long way**: Download Ian Mason's mocap data linked from his [Github repository](https://github.com/ianxmason/Fewshot_Learning_of_Homogeneous_Human_Locomotion_Styles#training-the-models) for the paper "Few-shot Learning of Homogeneous Human Locomotion Styles", unzip it, and place it in a convenient directory. A substantial amount of pre-processing was performed on this data (Ian Mason used a bunch of scripts written within Unity -- this is not a route I wanted to go down) -- see my [mocap-mtds](https://github.com/ornithos/mocap-mtds) Julia library for the pre-processing scripts. In particular, see the [`2_preprocess.ipynb`](https://github.com/ornithos/mocap-mtds/blob/master/2_preprocess.ipynb) notebook.
+
+**The short way**: I've uploaded my processed files here: [https://bit.ly/38x2sra](https://bit.ly/38x2sra). This includes three files for inputs (`Us`), outputs (`Ys`) and a style lookup dict which maps the style label (in {1,2,...,8}) to the indices of the inputs/outputs.
+
+### Training
+
+To train the model, I recommend using the two-layer architecture we describe in our upcoming paper. This uses a 1024-hidden-unit GRU as the first layer, and a multi-task 128-hidden-unit RNN (MTDS) in the second. We fix the dynamic bias _b_ of the MTDS in order to permit smooth interpolation between styles. This can be achieved using the `src/learn_mtfixbmodel.py` file: have a look at the options using `python learn_mtfixbmodel.py -h`. The default values have been extracted from the `argparse` code and stashed in the `src/default.ini` file. I recommend having a look at this to see reasonable values of the parameters which were used in the experiments, including the architecture hyperparameters. A value of `-1` in this file indicates that a default is derived from other args in the code if not specified. Note that the *h\_phi* generator network here is confusingly referred to as `psi` - a metonym, but using a different letter for the parameter than the new paper (which uses `phi`).
+
+
+To train a model over all 
 ```bash
-python translate.py --action walking --seq_length_out 64 --iterations 5000  --style_ix 1 --learning_rate 0.005
-```
-#### Generate data:
-```bash
-python translate.py --action walking --seq_length_out 64 --style_ix ${i} --use_cpu --load ../experiments/model_${i}_5000_res --sample
-```
-## Original (pytorch) readme below:
-------------
-
-## human-motion-prediction
-
-This is a pytorch implementation of the paper
-
-Julieta Martinez, Michael J. Black, Javier Romero.
-_On human motion prediction using recurrent neural networks_. In CVPR 17.
-
-It can be found on arxiv as well: https://arxiv.org/pdf/1705.02445.pdf
-
-The code in the original repository was written by [Julieta Martinez](https://github.com/una-dinosauria/) and [Javier Romero](https://github.com/libicocco/) and is accessible [here](/blob/master/src/translate.py).
-
-If you have any comment on this fork you can email me at [enriccorona93@gmail.com]
-
-### Dependencies
-
-* [h5py](https://github.com/h5py/h5py) -- to save samples
-* [Pytorch](https://pytorch.org/)
-
-### Get this code and the data
-
-First things first, clone this repo and get the human3.6m dataset on exponential map format.
-
-```bash
-git clone https://github.com/enriccorona/human-motion-prediction-pytorch.git
-cd human-motion-prediction-pytorch
-mkdir data
-cd data
-wget http://www.cs.stanford.edu/people/ashesh/h3.6m.zip
-unzip h3.6m.zip
-rm h3.6m.zip
-cd ..
+python src/learn_mtfixbmodel.py --style_ix 99 --latent_k 7 --input_size 64 --bottleneck 24 --iterations 20000 --hard_em_iters 10000 \
+  --learning_rate 3e-5 --learning_rate_mt 1e-3 --learning_rate_z 1e-3 --psi_affine
 ```
 
-### Quick demo and visualization
-
-The code in this fork should work exactly as in the original repo:
-
-For a quick demo, you can train for a few iterations and visualize the outputs
-of your model.
-
-To train, run
-```bash
-python src/translate.py --action walking --seq_length_out 25 --iterations 10000
-```
-
-To save some samples of the model, run
-```bash
-python src/translate.py --action walking --seq_length_out 25 --iterations 10000 --sample --load 10000
-```
-
-Finally, to visualize the samples run
-```bash
-python src/forward_kinematics.py
-```
-
-This should create a visualization similar to this one
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/una-dinosauria/human-motion-prediction/master/imgs/walking.gif"><br><br>
-</p>
-
-
-### Running average baselines
-
-To reproduce the running average baseline results from our paper, run
-
-`python src/baselines.py`
-
-### RNN models
-
-To train and reproduce the results of our models, use the following commands
-
-| model      | arguments | training time (gtx 1080) | notes |
-| ---        | ---       | ---   | --- |
-| Sampling-based loss (SA) | `python src/translate.py --action walking --seq_length_out 25` | 45s / 1000 iters | Realistic long-term motion, loss computed over 1 second. |
-| Residual (SA)            | `python src/translate.py --residual_velocities --action walking` | 35s / 1000 iters |  |
-| Residual unsup. (MA)     | `python src/translate.py --residual_velocities --learning_rate 0.005 --omit_one_hot` | 65s / 1000 iters | |
-| Residual sup. (MA)       | `python src/translate.py --residual_velocities --learning_rate 0.005` | 65s / 1000 iters | best quantitative.|
-| Untied       | `python src/translate.py --residual_velocities --learning_rate 0.005 --architecture basic` | 70s / 1000 iters | |
-
-
-You can substitute the `--action walking` parameter for any action in
+The `style_ix` flag specifies the style index of the test set; i.e. to be held-out for the LOO experiments. If no data are to be held out (e.g. for style transfer purposes), then specify a number greater than 8 (a sensible default I used was 99). Other useful flags include:
 
 ```
-["directions", "discussion", "eating", "greeting", "phoning",
- "posing", "purchases", "sitting", "sittingdown", "smoking",
- "takingphoto", "waiting", "walking", "walkingdog", "walkingtogether"]
+--use_cpu      # use CPU rather than GPU
+--data_dir     # specify the directory in which to find the Us, Ys, and style_lkp
 ```
 
-or `--action all` (default) to train on all actions.
+## Visualization
 
-### Citing
+Again, Ian Mason uses Unity - I've hacked a bunch of utilities together in Julia to visualize the result in the browser. These make use of [`three.js`](https://threejs.org/) and [`MeshCat.jl`](https://github.com/rdeits/MeshCat.jl).
 
-If you use our code, please cite our work
-
-```
-@inproceedings{julieta2017motion,
-  title={On human motion prediction using recurrent neural networks},
-  author={Martinez, Julieta and Black, Michael J. and Romero, Javier},
-  booktitle={CVPR},
-  year={2017}
-}
-```
-
-### Acknowledgments
-
-The pre-processed human 3.6m dataset and some of our evaluation code (specially under `src/data_utils.py`) was ported/adapted from [SRNN](https://github.com/asheshjain399/RNNexp/tree/srnn/structural_rnn) by [@asheshjain399](https://github.com/asheshjain399).
-
-### Licence
-MIT
