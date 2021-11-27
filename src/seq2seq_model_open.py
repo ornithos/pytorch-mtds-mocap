@@ -1,43 +1,33 @@
 """Sequence-to-sequence model for human motion prediction."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-# from tensorflow.python.ops import array_ops
-# from tensorflow.python.ops import variable_scope as vs
-
-import random
-
 import numpy as np
-import os
-from six.moves import xrange  # pylint: disable=redefined-builtin
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 
 class Seq2SeqModelOpen(nn.Module):
     """Sequence-to-sequence model for human motion prediction"""
 
-    def __init__(self,
-                 architecture,
-                 source_seq_len,
-                 target_seq_len,
-                 rnn_size,  # hidden recurrent layer size
-                 num_layers,
-                 max_gradient_norm,
-                 batch_size,
-                 learning_rate,
-                 learning_rate_decay_factor,
-                 loss_to_use,
-                 number_of_actions,
-                 one_hot=True,
-                 residual_velocities=False,
-                 output_dim=67,
-                 dropout=0.0,
-                 dtype=torch.float32,
-                 num_traj=0):
+    def __init__(
+        self,
+        architecture,
+        source_seq_len,
+        target_seq_len,
+        rnn_size,  # hidden recurrent layer size
+        num_layers,
+        max_gradient_norm,
+        batch_size,
+        learning_rate,
+        learning_rate_decay_factor,
+        loss_to_use,
+        number_of_actions,
+        one_hot=True,
+        residual_velocities=False,
+        output_dim=67,
+        dropout=0.0,
+        dtype=torch.float32,
+        num_traj=0,
+    ):
         """Create the model.
 
         Args:
@@ -78,7 +68,7 @@ class Seq2SeqModelOpen(nn.Module):
         self.dropout = dropout
         self.num_layers = num_layers
 
-        print('rnn_size = {0}'.format(rnn_size))
+        print("rnn_size = {0}".format(rnn_size))
         self.rnn = nn.GRU(self.input_size, self.rnn_size)
         if num_layers > 1:
             self.rnn2 = nn.GRU(self.rnn_size, self.rnn_size)
@@ -109,8 +99,9 @@ class Seq2SeqModelOpen(nn.Module):
                 state_out2, _ = self.rnn2(state_out, state_enc2)
                 state_out = torch.cat((state_out, state_out2), dim=2)
 
-            outputs = inputs_dec[:, :, 0:self.HUMAN_SIZE] + self.fc1(
-                F.dropout(state_out, self.dropout, training=self.training))
+            outputs = inputs_dec[:, :, 0 : self.HUMAN_SIZE] + self.fc1(
+                F.dropout(state_out, self.dropout, training=self.training)
+            )
 
         else:
             # Need to feed predictions back into inputs => (afaik) need to fall back on slower GRUCells.
@@ -136,13 +127,12 @@ class Seq2SeqModelOpen(nn.Module):
                 state_out = torch.cat((state, state2), dim=1)
             else:
                 state_out = state
-            output = u[:, 0:self.HUMAN_SIZE] + self.fc1(
-                F.dropout(state_out, self.dropout, training=self.training))
+            output = u[:, 0 : self.HUMAN_SIZE] + self.fc1(F.dropout(state_out, self.dropout, training=self.training))
             outputs.append(output.view([1, batchsize, self.HUMAN_SIZE]))
 
             # t > 1
             for i, u in enumerate(inputs_dec[1:]):
-                inp = torch.cat((output.detach(), u[:, self.HUMAN_SIZE:]), 1)
+                inp = torch.cat((output.detach(), u[:, self.HUMAN_SIZE :]), 1)
 
                 state = cells[0](inp, state)
                 if self.num_layers > 1:
@@ -151,8 +141,9 @@ class Seq2SeqModelOpen(nn.Module):
                 else:
                     state_out = state
 
-                output = inp[:, 0:self.HUMAN_SIZE] + self.fc1(
-                    F.dropout(state_out, self.dropout, training=self.training))
+                output = inp[:, 0 : self.HUMAN_SIZE] + self.fc1(
+                    F.dropout(state_out, self.dropout, training=self.training)
+                )
 
                 outputs.append(output.view([1, batchsize, self.HUMAN_SIZE]))
 
@@ -160,7 +151,6 @@ class Seq2SeqModelOpen(nn.Module):
 
         outputs = torch.transpose(outputs, 0, 1)
         return outputs
-
 
     def get_batch(self, data_Y, data_U, actions, stratify=False):
         """Get a random batch of data from the specified bucket, prepare for step.
@@ -191,7 +181,7 @@ class Seq2SeqModelOpen(nn.Module):
         decoder_inputs = np.zeros((bsz, self.target_seq_len, self.input_size), dtype=float)
         decoder_outputs = np.zeros((bsz, self.target_seq_len, self.HUMAN_SIZE), dtype=float)
 
-        for i in xrange(bsz):
+        for i in range(bsz):
             the_key = chosen_keys[i]
 
             # Get the number of frames
@@ -202,20 +192,20 @@ class Seq2SeqModelOpen(nn.Module):
             idx = np.random.randint(0, n - total_frames) if n > total_frames else 0
 
             # Select the data around the sampled points
-            data_Y_sel = data_Y[the_key][idx:idx + total_frames, :]
-            data_U_sel = data_U[the_key][idx:idx + total_frames, :]
+            data_Y_sel = data_Y[the_key][idx : idx + total_frames, :]
+            data_U_sel = data_U[the_key][idx : idx + total_frames, :]
 
             # Add the data
-            encoder_inputs[i, :, 0:self.HUMAN_SIZE] = data_Y_sel[0:self.source_seq_len - 1, :]
-            encoder_inputs[i, :, self.HUMAN_SIZE:] = data_U_sel[0:self.source_seq_len - 1, :]  # <= done
-            decoder_inputs[i, :, 0:self.HUMAN_SIZE] = data_Y_sel[
-                                                      self.source_seq_len - 1:self.source_seq_len + self.target_seq_len - 1,
-                                                      :]
-            decoder_inputs[i, :, self.HUMAN_SIZE:] = data_U_sel[
-                                                     self.source_seq_len - 1:self.source_seq_len + self.target_seq_len - 1,
-                                                     :]
-            decoder_outputs[i, :, 0:self.HUMAN_SIZE] = data_Y_sel[
-                                                       self.source_seq_len:self.source_seq_len + self.target_seq_len,
-                                                       :]  # <= done
+            encoder_inputs[i, :, 0 : self.HUMAN_SIZE] = data_Y_sel[0 : self.source_seq_len - 1, :]
+            encoder_inputs[i, :, self.HUMAN_SIZE :] = data_U_sel[0 : self.source_seq_len - 1, :]  # <= done
+            decoder_inputs[i, :, 0 : self.HUMAN_SIZE] = data_Y_sel[
+                self.source_seq_len - 1 : self.source_seq_len + self.target_seq_len - 1, :
+            ]
+            decoder_inputs[i, :, self.HUMAN_SIZE :] = data_U_sel[
+                self.source_seq_len - 1 : self.source_seq_len + self.target_seq_len - 1, :
+            ]
+            decoder_outputs[i, :, 0 : self.HUMAN_SIZE] = data_Y_sel[
+                self.source_seq_len : self.source_seq_len + self.target_seq_len, :
+            ]  # <= done
 
         return encoder_inputs, decoder_inputs, decoder_outputs

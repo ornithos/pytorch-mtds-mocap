@@ -9,7 +9,8 @@ import torch
 import torch.optim as optim
 from torch.autograd import Variable
 
-import mtfixb_model, mtfixb_model2
+import mtfixb_model
+import mtfixb_model2
 import parseopts
 
 
@@ -18,7 +19,7 @@ def create_model(args, total_num_batches):
 
     if len(args.load) > 0:
         print("Loading model")
-        model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+        model = torch.load(args.load, map_location="cpu") if args.use_cpu else torch.load(args.load)
         return model
 
     if args.k == 0:
@@ -49,7 +50,8 @@ def create_model(args, total_num_batches):
         residual_output=args.residual_velocities,
         init_state_noise=args.init_state_noise,
         mt_rnn=args.mt_rnn,
-        psi_affine=args.psi_affine)
+        psi_affine=args.psi_affine,
+    )
 
     if len(args.load) <= 0:
         if len(args.load_layer1) > 0:
@@ -58,7 +60,7 @@ def create_model(args, total_num_batches):
         return model
 
     print("Loading model")
-    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+    model = torch.load(args.load, map_location="cpu") if args.use_cpu else torch.load(args.load)
     return model
 
 
@@ -73,7 +75,8 @@ def create_model_k0(args, total_num_batches):
         args.input_size,
         args.dropout_p,
         args.residual_velocities,
-        args.init_state_noise)
+        args.init_state_noise,
+    )
 
     return model
 
@@ -96,7 +99,8 @@ def create_model_DD(args, total_num_batches):
         args.input_size,
         args.dropout_p,
         args.residual_velocities,
-        args.init_state_noise)
+        args.init_state_noise,
+    )
 
     return model
 
@@ -121,7 +125,8 @@ def create_model_BiasOnly(args, total_num_batches):
         input_dim=args.input_size,
         dropout=args.dropout_p,
         residual_output=args.residual_velocities,
-        init_state_noise=args.init_state_noise)
+        init_state_noise=args.init_state_noise,
+    )
 
     return model
 
@@ -148,7 +153,8 @@ def create_model_NoMTBias(args, total_num_batches):
         residual_output=args.residual_velocities,
         init_state_noise=args.init_state_noise,
         mt_rnn=args.mt_rnn,
-        psi_affine=args.psi_affine)
+        psi_affine=args.psi_affine,
+    )
 
     return model
 
@@ -210,10 +216,11 @@ def train(args):
         else:
             preds, _state = model(inputs)
 
-        err = (preds - outputs)
+        err = preds - outputs
         if has_weight:
-            err = err * torch.cat((torch.ones(1, 1, 3) * np.sqrt(args.first3_prec),
-                                   torch.ones(1, 1, args.human_size - 3)), dim=2).to(err.device)
+            err = err * torch.cat(
+                (torch.ones(1, 1, 3) * np.sqrt(args.first3_prec), torch.ones(1, 1, args.human_size - 3)), dim=2
+            ).to(err.device)
         if not has_ar_noise:
             sqerr = err ** 2
         else:
@@ -239,7 +246,9 @@ def train(args):
         if current_step % 10 == 0:
             if is_MT:
                 KLD_part = KLD.cpu().data.numpy()
-                print("step {0:04d}; step_loss: {1:.4f} ({2:.4f})".format(current_step, step_loss, step_loss-KLD_part))
+                print(
+                    "step {0:04d}; step_loss: {1:.4f} ({2:.4f})".format(current_step, step_loss, step_loss - KLD_part)
+                )
             else:
                 print("step {0:04d}; step_loss: {1:.4f}".format(current_step, step_loss))
 
@@ -253,12 +262,12 @@ def train(args):
         # Decay learning rate (if appl.)
         if current_step % args.learning_rate_step == 0:
             for param_group in optimiser.param_groups:
-                param_group['lr'] *= args.learning_rate_decay_factor
-            print("Decay learning rate. New value at " + str(optimiser.param_groups[0]['lr']))
+                param_group["lr"] *= args.learning_rate_decay_factor
+            print("Decay learning rate. New value at " + str(optimiser.param_groups[0]["lr"]))
 
         # remove Hard EM spec (if appl.)
         if is_hard_em and zls_ix is not None and current_step == args.hard_em_iters:
-            optimiser.param_groups[zls_ix]['lr'] = z_lr
+            optimiser.param_groups[zls_ix]["lr"] = z_lr
             model.standardise_aggregate_posterior()
 
         # Once in a while, we save checkpoint, print statistics, and run evals.
@@ -321,7 +330,7 @@ def train(args):
             #                                         args.learning_rate, step_time * 1000, loss,
             #                                         val_loss))
 
-            torch.save(model, args.train_dir + '/model_' + str(current_step))
+            torch.save(model, args.train_dir + "/model_" + str(current_step))
 
             # print()
             previous_losses.append(loss)
@@ -373,13 +382,13 @@ def ar_prec_matrix(rho, n):
     Prec = np.zeros((n, n))
     i, j = np.indices(Prec.shape)
     Prec[i == j] = 1 + rho ** 2
-    Prec[i == j - 1] = - rho
-    Prec[i == j + 2] = - rho
+    Prec[i == j - 1] = -rho
+    Prec[i == j + 2] = -rho
     return torch.tensor(Prec)
 
 
 def load_layer1(model, layer1_filename, use_cpu):
-    model_gru1 = torch.load(layer1_filename, map_location='cpu') if use_cpu else torch.load(layer1_filename)
+    model_gru1 = torch.load(layer1_filename, map_location="cpu") if use_cpu else torch.load(layer1_filename)
     if isinstance(model_gru1, mtfixb_model.OpenLoopGRU):
         model.layer1_rnn = model_gru1.rnn
         # model.layer1_linear = model_gru2.emission
@@ -387,6 +396,7 @@ def load_layer1(model, layer1_filename, use_cpu):
         model.layer1_rnn = model_gru1.rnn2
 
     return model
+
 
 def read_all_data(args):
     """
@@ -410,7 +420,9 @@ def read_all_data(args):
 
     njoints = args.human_size
     if not args.train_set_size == -1:
-        style_lkp = {str(i): range(1+args.train_set_size*(i-1), 1+args.train_set_size*i) for i in range(1,8+1)}
+        style_lkp = {
+            str(i): range(1 + args.train_set_size * (i - 1), 1 + args.train_set_size * i) for i in range(1, 8 + 1)
+        }
     else:
         style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
 
@@ -419,14 +431,17 @@ def read_all_data(args):
     njoints = train_set_Y[str(0)].shape[1] if njoints <= 0 else njoints
 
     if args.train_set_size != 0:
-        train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, len(style_lkp.keys()) + 1) if
-                                    i != args.style_ix])  # CAREFUL: jl is 1-based!
+        train_ixs = np.concatenate(
+            [
+                style_lkp[str(i)] for i in range(1, len(style_lkp.keys()) + 1) if i != args.style_ix
+            ]  # CAREFUL: jl is 1-based!
+        )
         train_set_Y = [train_set_Y[str(i)][:, :njoints] for i in train_ixs]
         train_set_U = [train_set_U[str(i)] for i in train_ixs]
     else:
         assert args.style_ix not in range(1, 9), "no support for LOO experiments with max MTL data yet. Use style_ix=9"
-        train_set_Y = [train_set_Y[str(i+1)][:, :njoints] for i in range(len(train_set_Y))]
-        train_set_U = [train_set_U[str(i+1)] for i in range(len(train_set_U))]
+        train_set_Y = [train_set_Y[str(i + 1)][:, :njoints] for i in range(len(train_set_Y))]
+        train_set_U = [train_set_U[str(i + 1)] for i in range(len(train_set_U))]
 
     print("Using files {:s}; {:s}".format(args.input_fname, args.output_fname))
     print("done reading data.")

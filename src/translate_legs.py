@@ -1,92 +1,91 @@
 """Simple code for training an RNN for motion prediction."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
+import argparse
 import os
 import sys
 import time
 
 import numpy as np
-
-from __trash__ import data_utils
-import seq2seq_model
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
-import argparse
+
+import seq2seq_model
+from __trash__ import data_utils
 
 # Learning
-parser = argparse.ArgumentParser(description='Train RNN for human pose estimation')
-parser.add_argument('--style_ix', dest='style_ix',
-                    help='Style index to hold out', type=int, required=True)
-parser.add_argument('--learning_rate', dest='learning_rate',
-                    help='Learning rate',
-                    default=0.005, type=float)
-parser.add_argument('--learning_rate_decay_factor', dest='learning_rate_decay_factor',
-                    help='Learning rate is multiplied by this much. 1 means no decay.',
-                    default=0.95, type=float)
-parser.add_argument('--learning_rate_step', dest='learning_rate_step',
-                    help='Every this many steps, do decay.',
-                    default=10000, type=int)
-parser.add_argument('--batch_size', dest='batch_size',
-                    help='Batch size to use during training.',
-                    default=16, type=int)
-parser.add_argument('--max_gradient_norm', dest='max_gradient_norm',
-                    help='Clip gradients to this norm.',
-                    default=5, type=float)
-parser.add_argument('--iterations', dest='iterations',
-                    help='Iterations to train for.',
-                    default=1e5, type=int)
-parser.add_argument('--test_every', dest='test_every',
-                    help='',
-                    default=200, type=int)
+parser = argparse.ArgumentParser(description="Train RNN for human pose estimation")
+parser.add_argument("--style_ix", dest="style_ix", help="Style index to hold out", type=int, required=True)
+parser.add_argument("--learning_rate", dest="learning_rate", help="Learning rate", default=0.005, type=float)
+parser.add_argument(
+    "--learning_rate_decay_factor",
+    dest="learning_rate_decay_factor",
+    help="Learning rate is multiplied by this much. 1 means no decay.",
+    default=0.95,
+    type=float,
+)
+parser.add_argument(
+    "--learning_rate_step", dest="learning_rate_step", help="Every this many steps, do decay.", default=10000, type=int
+)
+parser.add_argument("--batch_size", dest="batch_size", help="Batch size to use during training.", default=16, type=int)
+parser.add_argument(
+    "--max_gradient_norm", dest="max_gradient_norm", help="Clip gradients to this norm.", default=5, type=float
+)
+parser.add_argument("--iterations", dest="iterations", help="Iterations to train for.", default=1e5, type=int)
+parser.add_argument("--test_every", dest="test_every", help="", default=200, type=int)
 # Architecture
-parser.add_argument('--architecture', dest='architecture',
-                    help='Seq2seq architecture to use: [basic, tied].',
-                    default='tied', type=str)
-parser.add_argument('--loss_to_use', dest='loss_to_use',
-                    help='The type of loss to use, supervised or sampling_based',
-                    default='sampling_based', type=str)
-parser.add_argument('--residual_velocities', dest='residual_velocities',
-                    help='Add a residual connection that effectively models velocities', action='store_true',
-                    default=True)
-parser.add_argument('--size', dest='size',
-                    help='Size of each model layer.',
-                    default=1024, type=int)
-parser.add_argument('--num_layers', dest='num_layers',
-                    help='Number of layers in the model.',
-                    default=1, type=int)
-parser.add_argument('--seq_length_in', dest='seq_length_in',
-                    help='Number of frames to feed into the encoder. 25 fp',
-                    default=64, type=int)
-parser.add_argument('--seq_length_out', dest='seq_length_out',
-                    help='Number of frames that the decoder has to predict. 25fps',
-                    default=64, type=int)
-parser.add_argument('--omit_one_hot', dest='omit_one_hot',
-                    help='', action='store_true',
-                    default=True)
+parser.add_argument(
+    "--architecture", dest="architecture", help="Seq2seq architecture to use: [basic, tied].", default="tied", type=str
+)
+parser.add_argument(
+    "--loss_to_use",
+    dest="loss_to_use",
+    help="The type of loss to use, supervised or sampling_based",
+    default="sampling_based",
+    type=str,
+)
+parser.add_argument(
+    "--residual_velocities",
+    dest="residual_velocities",
+    help="Add a residual connection that effectively models velocities",
+    action="store_true",
+    default=True,
+)
+parser.add_argument("--size", dest="size", help="Size of each model layer.", default=1024, type=int)
+parser.add_argument("--num_layers", dest="num_layers", help="Number of layers in the model.", default=1, type=int)
+parser.add_argument(
+    "--seq_length_in",
+    dest="seq_length_in",
+    help="Number of frames to feed into the encoder. 25 fp",
+    default=64,
+    type=int,
+)
+parser.add_argument(
+    "--seq_length_out",
+    dest="seq_length_out",
+    help="Number of frames that the decoder has to predict. 25fps",
+    default=64,
+    type=int,
+)
+parser.add_argument("--omit_one_hot", dest="omit_one_hot", help="", action="store_true", default=True)
 # Directories
-parser.add_argument('--data_dir', dest='data_dir',
-                    help='Data directory',
-                    default=os.path.normpath("../../mocap-mtds/"), type=str)
-                    # default=os.path.normpath("../../mocap-mtds/data/"), type=str)
-parser.add_argument('--train_dir', dest='train_dir',
-                    help='Training directory',
-                    default=os.path.normpath("./experiments/"), type=str)
-parser.add_argument('--action', dest='action',
-                    help='The action to train on. all means all the actions, all_periodic means walking, eating and smoking',
-                    default='walking', type=str)
-parser.add_argument('--use_cpu', dest='use_cpu',
-                    help='', action='store_true',
-                    default=False)
-parser.add_argument('--load', dest='load',
-                    help='Try to load a previous checkpoint.',
-                    default='', type=str)
-parser.add_argument('--sample', dest='sample',
-                    help='Set to True for sampling.', action='store_true',
-                    default=False)
+parser.add_argument(
+    "--data_dir", dest="data_dir", help="Data directory", default=os.path.normpath("../../mocap-mtds/"), type=str
+)
+# default=os.path.normpath("../../mocap-mtds/data/"), type=str)
+parser.add_argument(
+    "--train_dir", dest="train_dir", help="Training directory", default=os.path.normpath("./experiments/"), type=str
+)
+parser.add_argument(
+    "--action",
+    dest="action",
+    help="The action to train on. all means all the actions, all_periodic means walking, eating and smoking",
+    default="walking",
+    type=str,
+)
+parser.add_argument("--use_cpu", dest="use_cpu", help="", action="store_true", default=False)
+parser.add_argument("--load", dest="load", help="Try to load a previous checkpoint.", default="", type=str)
+parser.add_argument("--sample", dest="sample", help="Set to True for sampling.", action="store_true", default=False)
 
 args = parser.parse_args()
 assert args.omit_one_hot, "not implemented yet"
@@ -94,17 +93,22 @@ assert args.action == "walking", "not implemented yet"
 assert args.residual_velocities, "not implemented yet. (Also not in original fork.)"
 assert args.num_layers == 1, "not implemented yet. (Also not in original fork.)"
 
-train_dir = os.path.normpath(os.path.join(args.train_dir, args.action,
-                                          'style_{0}'.format(args.style_ix),
-                                          'out_{0}'.format(args.seq_length_out),
-                                          'iterations_{0}'.format(args.iterations),
-                                          args.architecture,
-                                          args.loss_to_use,
-                                          'omit_one_hot' if args.omit_one_hot else 'one_hot',
-                                          'depth_{0}'.format(args.num_layers),
-                                          'size_{0}'.format(args.size),
-                                          'lr_{0}'.format(args.learning_rate),
-                                          'residual_vel' if args.residual_velocities else 'not_residual_vel'))
+train_dir = os.path.normpath(
+    os.path.join(
+        args.train_dir,
+        args.action,
+        "style_{0}".format(args.style_ix),
+        "out_{0}".format(args.seq_length_out),
+        "iterations_{0}".format(args.iterations),
+        args.architecture,
+        args.loss_to_use,
+        "omit_one_hot" if args.omit_one_hot else "one_hot",
+        "depth_{0}".format(args.num_layers),
+        "size_{0}".format(args.size),
+        "lr_{0}".format(args.learning_rate),
+        "residual_vel" if args.residual_velocities else "not_residual_vel",
+    )
+)
 
 print(train_dir)
 os.makedirs(train_dir, exist_ok=True)
@@ -129,13 +133,14 @@ def create_model(actions, sampling=False):
         args.residual_velocities,
         28,
         dtype=torch.float32,
-        num_traj=44)
+        num_traj=44,
+    )
 
     if len(args.load) <= 0:
         return model
 
     print("Loading model")
-    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+    model = torch.load(args.load, map_location="cpu") if args.use_cpu else torch.load(args.load)
     return model
 
 
@@ -147,7 +152,8 @@ def train():
     number_of_actions = len(actions)
 
     train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(
-        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix)
+        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix
+    )
 
     # Limit TF to take a fraction of the GPU memory
 
@@ -177,8 +183,9 @@ def train():
             # Actual training
 
             # === Training step ===
-            encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(train_set_Y, train_set_U,
-                                                                              not args.omit_one_hot)
+            encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(
+                train_set_Y, train_set_U, not args.omit_one_hot
+            )
             encoder_inputs = torch.from_numpy(encoder_inputs).float()
             decoder_inputs = torch.from_numpy(decoder_inputs).float()
             decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -193,7 +200,7 @@ def train():
             preds = model(encoder_inputs, decoder_inputs, not args.use_cpu)
 
             step_loss = (preds - decoder_outputs) ** 2
-            step_loss = step_loss * torch.cat((torch.ones(1,1,3)*25, torch.ones(1,1,28-3)), dim=2).cuda()
+            step_loss = step_loss * torch.cat((torch.ones(1, 1, 3) * 25, torch.ones(1, 1, 28 - 3)), dim=2).cuda()
             step_loss = step_loss.mean()
 
             # Actual backpropagation
@@ -212,7 +219,7 @@ def train():
             if current_step % args.learning_rate_step == 0:
                 args.learning_rate = args.learning_rate * args.learning_rate_decay_factor
                 for param_group in optimiser.param_groups:
-                    param_group['lr'] = args.learning_rate
+                    param_group["lr"] = args.learning_rate
                 print("Decay learning rate. New value at " + str(args.learning_rate))
 
             # cuda.empty_cache()
@@ -222,7 +229,7 @@ def train():
                 model.eval()
 
                 # === Validation with random data from test set ===
-                encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U,-1)
+                encoder_inputs, decoder_inputs, decoder_outputs = model.get_test_batch(test_set_Y, test_set_U, -1)
                 encoder_inputs = torch.from_numpy(encoder_inputs).float()
                 decoder_inputs = torch.from_numpy(decoder_inputs).float()
                 decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -259,18 +266,19 @@ def train():
                 print()
 
                 print()
-                print("============================\n"
-                      "Global step:         %d\n"
-                      "Learning rate:       %.4f\n"
-                      "Step-time (ms):     %.4f\n"
-                      "Train loss avg:      %.4f\n"
-                      "--------------------------\n"
-                      "Test loss:            %.4f\n"
-                      "============================" % (current_step,
-                                                        args.learning_rate, step_time * 1000, loss,
-                                                        val_loss))
+                print(
+                    "============================\n"
+                    "Global step:         %d\n"
+                    "Learning rate:       %.4f\n"
+                    "Step-time (ms):     %.4f\n"
+                    "Train loss avg:      %.4f\n"
+                    "--------------------------\n"
+                    "Test loss:            %.4f\n"
+                    "============================"
+                    % (current_step, args.learning_rate, step_time * 1000, loss, val_loss)
+                )
 
-                torch.save(model, train_dir + '/model_' + str(current_step))
+                torch.save(model, train_dir + "/model_" + str(current_step))
 
                 print()
                 previous_losses.append(loss)
@@ -309,15 +317,18 @@ def get_srnn_gts(actions, model, test_set, data_mean, data_std, dim_to_ignore, o
 
         # expmap -> rotmat -> euler
         for i in np.arange(srnn_expmap.shape[0]):
-            denormed = data_utils.unNormalizeData(srnn_expmap[i, :, :], data_mean, data_std, dim_to_ignore, actions,
-                                                  one_hot)
+            denormed = data_utils.unNormalizeData(
+                srnn_expmap[i, :, :], data_mean, data_std, dim_to_ignore, actions, one_hot
+            )
 
             if to_euler:
                 for j in np.arange(denormed.shape[0]):
                     for k in np.arange(3, 97, 3):
-                        denormed[j, k:k + 3] = data_utils.rotmat2euler(data_utils.expmap2rotmat(denormed[j, k:k + 3]))
+                        denormed[j, k : k + 3] = data_utils.rotmat2euler(
+                            data_utils.expmap2rotmat(denormed[j, k : k + 3])
+                        )
 
-            srnn_gt_euler.append(denormed);
+            srnn_gt_euler.append(denormed)
 
         # Put back in the dictionary
         srnn_gts_euler[action] = srnn_gt_euler
@@ -330,7 +341,8 @@ def sample():
     actions = define_actions(args.action)
 
     train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(
-        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix)
+        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix
+    )
 
     if True:
         # === Create the model ===
@@ -342,7 +354,7 @@ def sample():
         print("Model created")
 
         # Clean and create a new h5 file of samples
-        SAMPLES_FNAME = 'samples.h5'
+        SAMPLES_FNAME = "samples.h5"
         try:
             os.remove(SAMPLES_FNAME)
         except OSError:
@@ -389,10 +401,23 @@ def define_actions(action):
       ValueError if the action is not included in H3.6M
     """
 
-    actions = ["walking", "eating", "smoking", "discussion", "directions",
-               "greeting", "phoning", "posing", "purchases", "sitting",
-               "sittingdown", "takingphoto", "waiting", "walkingdog",
-               "walkingtogether"]
+    actions = [
+        "walking",
+        "eating",
+        "smoking",
+        "discussion",
+        "directions",
+        "greeting",
+        "phoning",
+        "posing",
+        "purchases",
+        "sitting",
+        "sittingdown",
+        "takingphoto",
+        "waiting",
+        "walkingdog",
+        "walkingtogether",
+    ]
 
     if action in actions:
         return [action]
@@ -426,8 +451,7 @@ def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
     """
 
     # === Read training data ===
-    print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
-        seq_length_in, seq_length_out))
+    print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(seq_length_in, seq_length_out))
 
     style_lkp = np.load(os.path.join(data_dir, "styles_lkp.npz"))
     train_ixs = np.concatenate([style_lkp[str(i)] for i in range(1, 9) if i != style_ix])
@@ -438,7 +462,9 @@ def read_all_data(seq_length_in, seq_length_out, data_dir, style_ix):
 
     test_set_Y = np.load(os.path.join(data_dir, "test_input_{0}_y.npz".format(style_ix)))
     test_set_U = np.load(os.path.join(data_dir, "test_input_{0}_u.npz".format(style_ix)))
-    test_set_Y = [test_set_Y[str(i + 1)][:28, :] for i in range(len(test_set_Y.keys()))]  # whatever, apparently test is transpose of train
+    test_set_Y = [
+        test_set_Y[str(i + 1)][:28, :] for i in range(len(test_set_Y.keys()))
+    ]  # whatever, apparently test is transpose of train
     test_set_U = [test_set_U[str(i + 1)] for i in range(len(test_set_U.keys()))]
 
     print("done reading data.")

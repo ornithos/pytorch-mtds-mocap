@@ -1,24 +1,19 @@
 """Simple code for training an RNN for motion prediction."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import math
 import os
-import random
 import sys
 import time
-import h5py
 
 import numpy as np
-from six.moves import xrange  # pylint: disable=redefined-builtin
-
-import seq2seq_model, seq2seq_model_open
 import torch
 import torch.optim as optim
 from torch.autograd import Variable
+
 import parseopts4bmark
+import seq2seq_model
+import seq2seq_model_open
 
 
 def create_model(args, actions, sampling=False):
@@ -41,7 +36,8 @@ def create_model(args, actions, sampling=False):
             args.residual_velocities,
             output_dim=67,
             dtype=torch.float32,
-            num_traj=35)
+            num_traj=35,
+        )
     else:
         model = seq2seq_model_open.Seq2SeqModelOpen(
             args.architecture,
@@ -59,13 +55,14 @@ def create_model(args, actions, sampling=False):
             args.residual_velocities,
             output_dim=67,
             dtype=torch.float32,
-            num_traj=35)
+            num_traj=35,
+        )
 
     if len(args.load) <= 0:
         return model
 
     print("Loading model")
-    model = torch.load(args.load, map_location='cpu') if args.use_cpu else torch.load(args.load)
+    model = torch.load(args.load, map_location="cpu") if args.use_cpu else torch.load(args.load)
     return model
 
 
@@ -92,13 +89,14 @@ def train(args):
         previous_losses, val_losses, save_ixs = [], [], []
 
         step_time, loss = 0, 0
-        if args.optimiser.upper() == 'SGD':
+        if args.optimiser.upper() == "SGD":
             optimiser = optim.SGD(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-        elif args.optimiser.upper() == 'ADAM':
-            optimiser = optim.Adam(model.parameters(), lr=args.learning_rate, betas=(0.9, 0.999),
-                                   weight_decay=args.weight_decay)
+        elif args.optimiser.upper() == "ADAM":
+            optimiser = optim.Adam(
+                model.parameters(), lr=args.learning_rate, betas=(0.9, 0.999), weight_decay=args.weight_decay
+            )
         else:
-            Exception('Unknown optimiser specified `{:s}`, please choose `SGD` or `Adam`'.format(args.optimiser))
+            Exception("Unknown optimiser specified `{:s}`, please choose `SGD` or `Adam`".format(args.optimiser))
 
         for _ in range(args.iterations):
             optimiser.zero_grad()
@@ -109,8 +107,9 @@ def train(args):
             # Actual training
 
             # === Training step ===
-            encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(train_set_Y, train_set_U,
-                                                                              not args.omit_one_hot)
+            encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(
+                train_set_Y, train_set_U, not args.omit_one_hot
+            )
             encoder_inputs = torch.from_numpy(encoder_inputs).float()
             decoder_inputs = torch.from_numpy(decoder_inputs).float()
             decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -145,7 +144,7 @@ def train(args):
             if current_step % args.learning_rate_step == 0:
                 args.learning_rate = args.learning_rate * args.learning_rate_decay_factor
                 for param_group in optimiser.param_groups:
-                    param_group['lr'] = args.learning_rate
+                    param_group["lr"] = args.learning_rate
                 print("Decay learning rate. New value at " + str(args.learning_rate))
 
             # cuda.empty_cache()
@@ -155,8 +154,9 @@ def train(args):
                 model.eval()
 
                 # === Validation with random data from test set ===
-                encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(test_set_Y, test_set_U,
-                                                                                  not args.omit_one_hot, stratify=True)
+                encoder_inputs, decoder_inputs, decoder_outputs = model.get_batch(
+                    test_set_Y, test_set_U, not args.omit_one_hot, stratify=True
+                )
                 encoder_inputs = torch.from_numpy(encoder_inputs).float()
                 decoder_inputs = torch.from_numpy(decoder_inputs).float()
                 decoder_outputs = torch.from_numpy(decoder_outputs).float()
@@ -192,18 +192,19 @@ def train(args):
                 print()
 
                 print()
-                print("============================\n"
-                      "Global step:         %d\n"
-                      "Learning rate:       %.4f\n"
-                      "Step-time (ms):     %.4f\n"
-                      "Train loss avg:      %.4f\n"
-                      "--------------------------\n"
-                      "Test loss:            %.4f\n"
-                      "============================" % (current_step,
-                                                        args.learning_rate, step_time * 1000, loss,
-                                                        val_loss))
+                print(
+                    "============================\n"
+                    "Global step:         %d\n"
+                    "Learning rate:       %.4f\n"
+                    "Step-time (ms):     %.4f\n"
+                    "Train loss avg:      %.4f\n"
+                    "--------------------------\n"
+                    "Test loss:            %.4f\n"
+                    "============================"
+                    % (current_step, args.learning_rate, step_time * 1000, loss, val_loss)
+                )
 
-                torch.save(model, args.train_dir + '/model_' + str(current_step))
+                torch.save(model, args.train_dir + "/model_" + str(current_step))
 
                 print()
                 previous_losses.append(loss)
@@ -216,9 +217,9 @@ def train(args):
                 sys.stdout.flush()
 
         best_step = save_ixs[np.argmin(val_losses)]
-        best_model = torch.load(args.train_dir + '/model_' + str(best_step))
+        best_model = torch.load(args.train_dir + "/model_" + str(best_step))
         print("><><><><><><><><><><><><>\nBest model is at step: {:d}.\n><><><><><><><><><><><><>\n".format(best_step))
-        torch.save(best_model, args.train_dir + '/model_best')
+        torch.save(best_model, args.train_dir + "/model_best")
 
 
 def sample(args):
@@ -226,7 +227,8 @@ def sample(args):
     actions = define_actions(args.action)
 
     train_set_Y, train_set_U, test_set_Y, test_set_U = read_all_data(
-        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix)
+        args.seq_length_in, args.seq_length_out, args.data_dir, args.style_ix
+    )
 
     if True:
         # === Create the model ===
@@ -238,7 +240,7 @@ def sample(args):
         print("Model created")
 
         # Clean and create a new h5 file of samples
-        SAMPLES_FNAME = 'samples.h5'
+        SAMPLES_FNAME = "samples.h5"
         try:
             os.remove(SAMPLES_FNAME)
         except OSError:
@@ -285,10 +287,23 @@ def define_actions(action):
       ValueError if the action is not included in H3.6M
     """
 
-    actions = ["walking", "eating", "smoking", "discussion", "directions",
-               "greeting", "phoning", "posing", "purchases", "sitting",
-               "sittingdown", "takingphoto", "waiting", "walkingdog",
-               "walkingtogether"]
+    actions = [
+        "walking",
+        "eating",
+        "smoking",
+        "discussion",
+        "directions",
+        "greeting",
+        "phoning",
+        "posing",
+        "purchases",
+        "sitting",
+        "sittingdown",
+        "takingphoto",
+        "waiting",
+        "walkingdog",
+        "walkingtogether",
+    ]
 
     if action in actions:
         return [action]
@@ -331,8 +346,7 @@ def read_all_data(args):
     * train_set_size == 0:   This is the maximal training set size for MTL, being the complement of the MTL test set.
     """
     # === Read training data ===
-    print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(
-        args.seq_length_in, args.seq_length_out))
+    print("Reading training data (seq_len_in: {0}, seq_len_out {1}).".format(args.seq_length_in, args.seq_length_out))
 
     style_ixs = set(range(1, 9)) - {args.style_ix} if not args.stl else {args.style_ix}
     style_lkp = np.load(os.path.join(args.data_dir, args.stylelkp_fname))
@@ -343,8 +357,10 @@ def read_all_data(args):
     if args.train_set_size == -1:
         pct_train = 0.875
 
-        train_ix_end = np.floor([sum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) * pct_train for j in style_ixs])
-        train_ix_end = train_ix_end.astype('int')
+        train_ix_end = np.floor(
+            [sum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) * pct_train for j in style_ixs]
+        )
+        train_ix_end = train_ix_end.astype("int")
         train_len_cum = [np.cumsum([load_Y[str(i)].shape[0] for i in style_lkp[str(j)]]) for j in style_ixs]
 
         train_set_Y, train_set_U, valid_set_Y, valid_set_U = [], [], [], []
@@ -358,10 +374,10 @@ def read_all_data(args):
                     train_set_U.append(load_U[load_ix])
                     cum_prv = cuml
                 elif not found_breakpt:
-                    train_set_Y.append(load_Y[load_ix][:e - cum_prv, :])
-                    train_set_U.append(load_U[load_ix][:e - cum_prv, :])
-                    valid_set_Y.append(load_Y[load_ix][e - cum_prv:, :])
-                    valid_set_U.append(load_U[load_ix][e - cum_prv:, :])
+                    train_set_Y.append(load_Y[load_ix][: e - cum_prv, :])
+                    train_set_U.append(load_U[load_ix][: e - cum_prv, :])
+                    valid_set_Y.append(load_Y[load_ix][e - cum_prv :, :])
+                    valid_set_U.append(load_U[load_ix][e - cum_prv :, :])
                     found_breakpt = True
                 else:
                     valid_set_Y.append(load_Y[load_ix])
@@ -372,8 +388,16 @@ def read_all_data(args):
             train_set_Y = [load_Y[str(i + 1)] for i in range(len(load_Y))]
             train_set_U = [load_U[str(i + 1)] for i in range(len(load_U))]
             if args.style_ix in range(1, 9):
-                sel_ixs = [slice(0, 8), slice(8, 15), slice(15, 21), slice(21, 29), slice(29, 37),
-                           slice(37, 45), slice(45, 52), slice(52, 59)][args.style_ix-1]
+                sel_ixs = [
+                    slice(0, 8),
+                    slice(8, 15),
+                    slice(15, 21),
+                    slice(21, 29),
+                    slice(29, 37),
+                    slice(37, 45),
+                    slice(45, 52),
+                    slice(52, 59),
+                ][args.style_ix - 1]
                 train_set_Y, train_set_U = train_set_Y[sel_ixs], train_set_U[sel_ixs]
             train_set_Y = list(filter(lambda y: y.shape[0] >= 128, train_set_Y))
             train_set_U = list(filter(lambda u: u.shape[0] >= 128, train_set_U))
@@ -384,8 +408,8 @@ def read_all_data(args):
                 step = 8
                 num_each = 2
                 num_areas = 2
-                load_Y = np.load(os.path.join(args.data_dir, args.output_fname.replace('4', '8')))
-                load_U = np.load(os.path.join(args.data_dir, args.input_fname.replace('4', '8')))
+                load_Y = np.load(os.path.join(args.data_dir, args.output_fname.replace("4", "8")))
+                load_U = np.load(os.path.join(args.data_dir, args.input_fname.replace("4", "8")))
             else:
                 num_each = args.train_set_size // 4
                 step = args.train_set_size
@@ -393,8 +417,16 @@ def read_all_data(args):
 
             for i in np.sort(list(style_ixs)):
                 for j in range(num_areas):
-                    train_set_Y.append(np.concatenate([load_Y[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
-                    train_set_U.append(np.concatenate([load_U[str((i-1) * step + j*num_each + l + 1)] for l in range(num_each)], axis=0))
+                    train_set_Y.append(
+                        np.concatenate(
+                            [load_Y[str((i - 1) * step + j * num_each + l + 1)] for l in range(num_each)], axis=0
+                        )
+                    )
+                    train_set_U.append(
+                        np.concatenate(
+                            [load_U[str((i - 1) * step + j * num_each + l + 1)] for l in range(num_each)], axis=0
+                        )
+                    )
 
         valid_Y = np.load(os.path.join(args.data_dir, "edin_Ys_30fps_variableN_test_valids_all.npz"))
         valid_U = np.load(os.path.join(args.data_dir, "edin_Us_30fps_variableN_test_valids_all.npz"))
@@ -402,8 +434,8 @@ def read_all_data(args):
         num_valid_each = 4
         for i in np.sort(list(style_ixs)):
             for j in range(num_valid_each):
-                valid_set_Y.append(valid_Y[str((i-1) * num_valid_each + j + 1)])
-                valid_set_U.append(valid_U[str((i-1) * num_valid_each + j + 1)])
+                valid_set_Y.append(valid_Y[str((i - 1) * num_valid_each + j + 1)])
+                valid_set_U.append(valid_U[str((i - 1) * num_valid_each + j + 1)])
 
     print("done reading data.")
 
