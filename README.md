@@ -91,24 +91,16 @@ The first line tells you where the model checkpoints will be saved, we then get 
 
 ### Visualization
 
-Ian Mason uses Unity for output visualisations of the training data. In order to avoid the pain of getting to know a huge and unfamiliar C# codebase, I've hacked a workflow together in Julia to visualize the result in the browser. These make use of [`three.js`](https://threejs.org/) and [`MeshCat.jl`](https://github.com/rdeits/MeshCat.jl). Due to various updates within MeshCat, I've had to patch the code up from the original implementation. Unfortunately it no longer works quite as well as it used to; specifically the angles of the bones between joints are slightly messed up, but I don't have sufficient time to fix what appears to be a cosmetic problem. In sum, this is a nontrivial piece of work, and it could be cleaner, and probably more concise, but again, time precludes fixing this. I would welcome anyone with more experience with 3D graphics/animation trying to streamline this, or point to a more mature implementation. See `experimentation/animation.ipynb` for an example of getting this working. An example of the output can be seen below.
+Ian Mason uses Unity for output visualisations of the training data. In order to avoid the pain of getting to know a huge and unfamiliar C# codebase, I've hacked a workflow together in Julia to visualize the result in the browser. These make use of [`three.js`](https://threejs.org/) and [`MeshCat.jl`](https://github.com/rdeits/MeshCat.jl). Due to various updates within MeshCat, I've had to patch the code up from the original implementation. Unfortunately it no longer works quite as well as it used to; specifically the angles of the bones between joints are slightly messed up, but I don't have sufficient time to fix what appears to be a cosmetic problem. In sum, this is a nontrivial piece of work, and it could be cleaner, and probably more concise, but again, time precludes fixing this. I would welcome anyone with more experience with 3D graphics/animation trying to streamline this, or point to a more mature implementation. See `experimentation/viz_julia.ipynb` for an example of getting this working. An example of the output can be seen below.
+
+![Example visualization](imgs/mocap_threejs.png)
 
 #### Notes to self
-Visualization is proving a right pain. Getting a Julia environment that works, and updating the code for breaking changes in the packages since I wrote it has taken quite some time. Now I'm at the stage of trying to construct the skeleton from the output, and it's proving hard, so I've dumped everything from my laptop and I'm starting to go through it. Current position.
-
+* mocap-mtds-macbook is a copy of this project in the state from the macbook.
 * I've trained a MTDS model per the paper for Mocap. However this is for n_u = 32 (I've omitted the root joint input, which is essentially passed through - this is in line with the paper but at variance to the actual experiments from what I can tell.)
     * Update paper
     * Re-train model for n_u = 35.... also n_y = 67? See animations.ipynb
 
-* Try to work out what's going on in mocap-mtds-macbook in animations.ipynb. This seems to be different to what I'm expecting, and uses a whole bunch of additional tooling that is breaking. I'm currently trying to avoid this.
-
-* Next steps:
-    1. Get something working in animations.ipynb
-    2. Port the "something working" to the mocap-mtds project
-    3. Retrain models as required
-    4. Work out competitor model training
-    5. Visualise the output of each model, and ideally get a picture of the latent space.
-    6. IDEAL: calculate MSE.
 
 #### Footnotes
 
