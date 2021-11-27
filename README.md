@@ -21,7 +21,7 @@ The default values used by `argparse` can be found in the `src/default.ini` file
 
 To train a model over all styles, using the described architecture, run the following command from the command line:
 ```bash
-python src/learn_mtfixbmodel.py --style_ix 99 --latent_k 7 --input_size 32 --bottleneck 24 --iterations 20000 --hard_em_iters 10000 \
+python src/learn_mtfixbmodel.py --style_ix 99 --latent_k 7 --input_size 35 --bottleneck 24 --iterations 20000 --hard_em_iters 10000 \
   --learning_rate 3e-5 --learning_rate_mt 1e-3 --learning_rate_z 1e-3 --psi_affine --data_dir <data_path>
 ```
 
